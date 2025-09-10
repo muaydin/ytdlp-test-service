@@ -1,8 +1,6 @@
-version: '3.8'
-
 services:
   ytdlp-test:
-    build: .
+    image: ytdlp-test-service
     ports:
       - "8090:8090"
     environment:
