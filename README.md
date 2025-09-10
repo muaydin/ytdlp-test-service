@@ -5,55 +5,147 @@ A comprehensive Flask-based web service for testing yt-dlp (YouTube video downlo
 ![yt-dlp Test Service](https://img.shields.io/badge/Python-3.7+-blue.svg)
 ![Flask](https://img.shields.io/badge/Flask-2.3.3-green.svg)
 ![yt-dlp](https://img.shields.io/badge/yt--dlp-2025.09.05-red.svg)
+![Docker](https://img.shields.io/badge/Docker-Ready-blue.svg)
 ![License](https://img.shields.io/badge/License-MIT-yellow.svg)
 
 ## ✨ Features
 
-- **🎨 Modern Web UI**: Beautiful, responsive interface with progress bars and real-time feedback
+- **�� Modern Web UI**: Beautiful, responsive interface with progress bars and real-time feedback
 - **📊 Metadata Extraction**: Get video information without downloading
 - **⬇️ Download Testing**: Test actual video downloads to memory with verification
 - **🔗 RESTful API**: Complete REST API with JSON responses
 - **📚 API Documentation**: Built-in comprehensive API documentation
+- **🐋 Docker Ready**: Complete Docker setup with Compose and deployment scripts
 - **🛡️ Security**: Input validation and sandboxed command execution
 - **📱 Mobile Responsive**: Works perfectly on desktop and mobile devices
 
 ## 🚀 Quick Start
 
-### Prerequisites
-- Python 3.7 or higher
-- pip (Python package installer)
+### Option 1: Docker (Recommended) 🐋
 
-### Installation
+**Prerequisites**: Docker and Docker Compose installed
 
-1. **Clone the repository:**
 ```bash
-git clone https://github.com/[username]/ytdlp-test.git
-cd ytdlp-test
+# Clone the repository
+git clone https://github.com/muaydin/ytdlp-test-service.git
+cd ytdlp-test-service
+
+# Start with one command
+./docker-deploy.sh up
+
+# Access the service at http://localhost:8090
 ```
 
-2. **Run the automated setup:**
+**That's it!** The service is now running in a container with all dependencies included.
+
+### Option 2: Local Python Setup
+
+**Prerequisites**: Python 3.7+ and pip
+
 ```bash
+# Clone the repository
+git clone https://github.com/muaydin/ytdlp-test-service.git
+cd ytdlp-test-service
+
+# Run the automated setup
 ./setup_local.sh
-```
 
-3. **Or manual setup:**
-```bash
-python3 -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
-```
-
-4. **Start the service:**
-```bash
+# Start the service
 python app.py
 ```
 
 The service will start on `http://localhost:8090`
 
+## 🐋 Docker Usage Guide
+
+### Quick Commands
+
+| Command | Description |
+|---------|-------------|
+| `./docker-deploy.sh up` | Start the service |
+| `./docker-deploy.sh down` | Stop the service |
+| `./docker-deploy.sh logs` | View service logs |
+| `./docker-deploy.sh status` | Check service status |
+| `./docker-deploy.sh test` | Run API tests |
+| `./docker-deploy.sh clean` | Remove everything |
+
+### Detailed Docker Commands
+
+**Start the service:**
+```bash
+./docker-deploy.sh up
+# or
+docker-compose up -d
+```
+
+**View logs:**
+```bash
+./docker-deploy.sh logs
+# or
+docker-compose logs -f
+```
+
+**Stop the service:**
+```bash
+./docker-deploy.sh down
+# or
+docker-compose down
+```
+
+**Rebuild and restart:**
+```bash
+./docker-deploy.sh build
+./docker-deploy.sh up
+```
+
+**Access container shell:**
+```bash
+./docker-deploy.sh shell
+# or
+docker-compose exec ytdlp-test bash
+```
+
+### Docker Features
+
+- **🏗️ Multi-stage Build**: Optimized image (~800MB) with all dependencies
+- **🔒 Security**: Runs as non-root user (`ytdlp`)
+- **📦 Complete Stack**: Includes FFmpeg, Python, and all dependencies
+- **🩺 Health Checks**: Automatic container health monitoring
+- **🔄 Auto-restart**: Containers restart on failure
+- **📊 Volume Management**: Persistent storage for temporary files
+- **🌐 Network Isolation**: Dedicated Docker network
+
+### Manual Docker Commands
+
+If you prefer manual control:
+
+```bash
+# Build the image
+docker build -t ytdlp-test-service .
+
+# Run the container
+docker run -d \
+  --name ytdlp-test \
+  -p 8090:8090 \
+  --restart unless-stopped \
+  ytdlp-test-service
+
+# View logs
+docker logs -f ytdlp-test
+
+# Stop and remove
+docker stop ytdlp-test
+docker rm ytdlp-test
+```
+
 ## 🧪 Testing
 
 ### Quick Test Script
 ```bash
+# For Docker
+./docker-deploy.sh test
+
+# For local setup
 ./test_local.sh
 ```
 
@@ -138,17 +230,6 @@ The modern web interface includes:
 
 ## 🚢 Deployment
 
-### Railway (Recommended)
-```bash
-# Install Railway CLI
-npm install -g @railway/cli
-
-# Deploy
-railway login
-railway link
-railway up
-```
-
 ### Docker (Recommended for Production)
 
 **Quick Start with Docker Compose:**
@@ -163,42 +244,27 @@ cd ytdlp-test-service
 # Access the service at http://localhost:8090
 ```
 
-**Manual Docker Commands:**
+**Production Deployment:**
 ```bash
-# Build the image
-docker build -t ytdlp-test-service .
+# Build production image
+./docker-deploy.sh build
 
-# Run the container
-docker run -d \
-  --name ytdlp-test \
-  -p 8090:8090 \
-  --restart unless-stopped \
-  ytdlp-test-service
-
-# View logs
-docker logs -f ytdlp-test
-```
-
-**Docker Compose (Full Control):**
-```bash
-# Start services
+# Start with restart policy
 docker-compose up -d
 
-# View logs
-docker-compose logs -f
-
-# Stop services
-docker-compose down
+# Monitor health
+./docker-deploy.sh status
 ```
 
-**Using the Docker Deployment Script:**
+### Railway (Alternative)
 ```bash
-./docker-deploy.sh build    # Build the image
-./docker-deploy.sh up       # Start services
-./docker-deploy.sh test     # Run tests
-./docker-deploy.sh logs     # View logs
-./docker-deploy.sh down     # Stop services
-./docker-deploy.sh clean    # Clean up everything
+# Install Railway CLI
+npm install -g @railway/cli
+
+# Deploy
+railway login
+railway link
+railway up
 ```
 
 ### Manual Deployment
@@ -225,33 +291,79 @@ ytdlp-test-service/
 └── railway.toml        # Railway configuration
 ```
 
-### Docker Features
+### Docker Development
 
-The Docker setup includes several production-ready features:
+**Build and test locally:**
+```bash
+# Build the image
+./docker-deploy.sh build
 
-- **🏗️ Multi-stage Build**: Optimized image size and security
-- **🔒 Non-root User**: Runs as `ytdlp` user for security
-- **📦 FFmpeg Included**: All necessary dependencies for video processing
-- **🩺 Health Checks**: Built-in container health monitoring
-- **🔄 Auto-restart**: Containers restart automatically on failure
-- **📊 Volume Management**: Persistent storage for temporary files
-- **🌐 Network Isolation**: Dedicated network for services
-- **🚀 Production Ready**: Optimized for deployment
+# Run tests
+./docker-deploy.sh test
+
+# Access container for debugging
+./docker-deploy.sh shell
+```
+
+**Development workflow:**
+```bash
+# Make changes to code
+# Rebuild image
+./docker-deploy.sh build
+
+# Restart services
+./docker-deploy.sh up
+
+# Test changes
+./docker-deploy.sh test
+```
 
 ### Adding New Features
 1. Fork the repository
 2. Create a feature branch
 3. Make your changes
-4. Add tests if applicable
-5. Submit a pull request
+4. Test with Docker: `./docker-deploy.sh test`
+5. Add tests if applicable
+6. Submit a pull request
 
 ## 🚨 Important Notes
 
 - **YouTube Restrictions**: Due to YouTube's bot protection, downloads may only retrieve storyboard images or metadata rather than actual video files. This is normal and expected behavior.
 - **Rate Limiting**: YouTube may temporarily block requests if too many are made quickly.
 - **Legal Compliance**: This tool is for testing purposes only. Respect YouTube's Terms of Service and copyright laws.
+- **Docker Requirements**: Docker Desktop or Docker Engine required for containerized deployment.
 
 ## 🐛 Troubleshooting
+
+### Docker Issues
+
+**Container won't start:**
+```bash
+# Check Docker status
+docker ps -a
+
+# View logs
+./docker-deploy.sh logs
+
+# Rebuild image
+./docker-deploy.sh build
+```
+
+**Port conflicts:**
+```bash
+# Check what's using port 8090
+lsof -i :8090
+
+# Use different port
+docker run -p 8091:8090 ytdlp-test-service
+```
+
+**Permission issues:**
+```bash
+# Clean up and rebuild
+./docker-deploy.sh clean
+./docker-deploy.sh build
+```
 
 ### Common Issues
 
@@ -259,11 +371,13 @@ The Docker setup includes several production-ready features:
 2. **Import errors**: Ensure virtual environment is activated
 3. **yt-dlp errors**: Check `/ytdlp-info` endpoint for status
 4. **Download failures**: Usually due to YouTube restrictions (expected)
+5. **Docker not found**: Install Docker Desktop or Docker Engine
 
 ### Getting Help
 - Check the built-in API documentation: `http://localhost:8090/api-docs`
-- Review the test script output: `./test_local.sh`
+- Review the test script output: `./test_local.sh` or `./docker-deploy.sh test`
 - Enable debug mode: `FLASK_ENV=development python app.py`
+- View Docker logs: `./docker-deploy.sh logs`
 
 ## 📄 License
 
@@ -277,8 +391,9 @@ Contributions are welcome! Please feel free to submit a Pull Request. For major 
 
 - [yt-dlp](https://github.com/yt-dlp/yt-dlp) - The excellent YouTube downloader
 - [Flask](https://flask.palletsprojects.com/) - The web framework
+- [Docker](https://www.docker.com/) - Containerization platform
 - [Railway](https://railway.app/) - Deployment platform
 
 ---
 
-**Made with ❤️ for testing yt-dlp functionality** 
+**Made with ❤️ for testing yt-dlp functionality**
