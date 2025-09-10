@@ -266,27 +266,21 @@ def home():
                             <span class="endpoint-method method-post">POST</span>
                             <strong>/test-ytdlp</strong>
                             <p>Extract video metadata without downloading</p>
-                            <div class="code-block">curl -X POST http://localhost:8090/test-ytdlp \\
-  -H "Content-Type: application/json" \\
-  -d '{"url": "https://youtube.com/watch?v=..."}'</div>
+                            <div class="code-block">curl -X POST http://localhost:8090/test-ytdlp -H "Content-Type: application/json" -d '{"url": "https://youtube.com/watch?v=..."}'</div>
                         </div>
                         
                         <div class="endpoint-card">
                             <span class="endpoint-method method-post">POST</span>
                             <strong>/test-download</strong>
                             <p>Download video content to memory for testing</p>
-                            <div class="code-block">curl -X POST http://localhost:8090/test-download \\
-  -H "Content-Type: application/json" \\
-  -d '{"url": "https://youtube.com/watch?v=..."}'</div>
+                            <div class="code-block">curl -X POST http://localhost:8090/test-download -H "Content-Type: application/json" -d '{"url": "https://youtube.com/watch?v=..."}'</div>
                         </div>
                         
                                                  <div class="endpoint-card">
                              <span class="endpoint-method method-post">POST</span>
                              <strong>/terminal</strong>
                              <p>Execute yt-dlp commands directly on server</p>
-                             <div class="code-block">curl -X POST http://localhost:8090/terminal \\
-  -H "Content-Type: application/json" \\
-  -d '{"command": "yt-dlp --version"}'</div>
+                             <div class="code-block">curl -X POST http://localhost:8090/terminal -H "Content-Type: application/json" -d '{"command": "yt-dlp --version"}'</div>
                          </div>
                          
                          <div class="endpoint-card">
