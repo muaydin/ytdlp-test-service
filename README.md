@@ -149,13 +149,56 @@ railway link
 railway up
 ```
 
-### Docker
-```bash
-# Build
-docker build -t ytdlp-test .
+### Docker (Recommended for Production)
 
-# Run
-docker run -p 8090:8090 ytdlp-test
+**Quick Start with Docker Compose:**
+```bash
+# Clone the repository
+git clone https://github.com/muaydin/ytdlp-test-service.git
+cd ytdlp-test-service
+
+# Start with Docker Compose (easiest)
+./docker-deploy.sh up
+
+# Access the service at http://localhost:8090
+```
+
+**Manual Docker Commands:**
+```bash
+# Build the image
+docker build -t ytdlp-test-service .
+
+# Run the container
+docker run -d \
+  --name ytdlp-test \
+  -p 8090:8090 \
+  --restart unless-stopped \
+  ytdlp-test-service
+
+# View logs
+docker logs -f ytdlp-test
+```
+
+**Docker Compose (Full Control):**
+```bash
+# Start services
+docker-compose up -d
+
+# View logs
+docker-compose logs -f
+
+# Stop services
+docker-compose down
+```
+
+**Using the Docker Deployment Script:**
+```bash
+./docker-deploy.sh build    # Build the image
+./docker-deploy.sh up       # Start services
+./docker-deploy.sh test     # Run tests
+./docker-deploy.sh logs     # View logs
+./docker-deploy.sh down     # Stop services
+./docker-deploy.sh clean    # Clean up everything
 ```
 
 ### Manual Deployment
@@ -166,16 +209,34 @@ docker run -p 8090:8090 ytdlp-test
 
 ### Project Structure
 ```
-ytdlp-test/
+ytdlp-test-service/
 ├── app.py              # Main Flask application
 ├── requirements.txt    # Python dependencies
-├── setup_local.sh     # Automated setup script
-├── test_local.sh      # Testing script
-├── README.md          # This file
-├── .gitignore         # Git ignore rules
-├── Procfile           # Railway deployment config
-└── railway.toml       # Railway configuration
+├── Dockerfile          # Multi-stage Docker build
+├── docker-compose.yml  # Docker Compose configuration
+├── .dockerignore       # Docker build exclusions
+├── docker-deploy.sh    # Docker deployment script
+├── setup_local.sh      # Automated setup script
+├── test_local.sh       # Testing script
+├── README.md           # This file
+├── LICENSE             # MIT License
+├── .gitignore          # Git ignore rules
+├── Procfile            # Railway deployment config
+└── railway.toml        # Railway configuration
 ```
+
+### Docker Features
+
+The Docker setup includes several production-ready features:
+
+- **🏗️ Multi-stage Build**: Optimized image size and security
+- **🔒 Non-root User**: Runs as `ytdlp` user for security
+- **📦 FFmpeg Included**: All necessary dependencies for video processing
+- **🩺 Health Checks**: Built-in container health monitoring
+- **🔄 Auto-restart**: Containers restart automatically on failure
+- **📊 Volume Management**: Persistent storage for temporary files
+- **🌐 Network Isolation**: Dedicated network for services
+- **🚀 Production Ready**: Optimized for deployment
 
 ### Adding New Features
 1. Fork the repository

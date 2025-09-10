@@ -1,0 +1,41 @@
+version: '3.8'
+
+services:
+  ytdlp-test:
+    build: .
+    ports:
+      - "8090:8090"
+    environment:
+      - PORT=8090
+      - FLASK_ENV=production
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8090/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    volumes:
+      # Optional: mount a volume for temporary files
+      - ytdlp-temp:/tmp/ytdlp-downloads
+    networks:
+      - ytdlp-network
+
+  # Optional: Add a reverse proxy (uncomment if needed)
+  # nginx:
+  #   image: nginx:alpine
+  #   ports:
+  #     - "80:80"
+  #   volumes:
+  #     - ./nginx.conf:/etc/nginx/nginx.conf:ro
+  #   depends_on:
+  #     - ytdlp-test
+  #   networks:
+  #     - ytdlp-network
+
+volumes:
+  ytdlp-temp:
+
+networks:
+  ytdlp-network:
+    driver: bridge 

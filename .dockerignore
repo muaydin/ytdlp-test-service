@@ -1,0 +1,60 @@
+# Git
+.git
+.gitignore
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+ENV/
+.venv/
+
+# Logs
+*.log
+server.log
+
+# Temporary files
+*.tmp
+*.temp
+*.part
+--Frag*.part
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Environment variables
+.env
+.env.local
+
+# Downloaded test files
+/tmp/test-*
+/tmp/flask-test-*
+
+# Documentation (keep README.md but exclude development docs)
+docs/
+*.md
+!README.md
+
+# Development tools
+.pytest_cache/
+.coverage
+.tox/
+
+# Railway specific
+.railway/
+
+# Docker
+Dockerfile*
+docker-compose*
+.dockerignore 
