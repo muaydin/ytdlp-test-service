@@ -1,6 +1,6 @@
 services:
   ytdlp-test:
-    image: ytdlp-test-service
+    build: .
     ports:
       - "8090:8090"
     environment:
@@ -19,21 +19,9 @@ services:
     networks:
       - ytdlp-network
 
-  # Optional: Add a reverse proxy (uncomment if needed)
-  # nginx:
-  #   image: nginx:alpine
-  #   ports:
-  #     - "80:80"
-  #   volumes:
-  #     - ./nginx.conf:/etc/nginx/nginx.conf:ro
-  #   depends_on:
-  #     - ytdlp-test
-  #   networks:
-  #     - ytdlp-network
-
 volumes:
   ytdlp-temp:
 
 networks:
   ytdlp-network:
-    driver: bridge 
+    driver: bridge
