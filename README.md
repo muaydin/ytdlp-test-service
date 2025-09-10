@@ -75,21 +75,21 @@ The service will start on `http://localhost:8090`
 ```bash
 ./docker-deploy.sh up
 # or
-docker-compose up -d
+docker compose up -d
 ```
 
 **View logs:**
 ```bash
 ./docker-deploy.sh logs
 # or
-docker-compose logs -f
+docker compose logs -f
 ```
 
 **Stop the service:**
 ```bash
 ./docker-deploy.sh down
 # or
-docker-compose down
+docker compose down
 ```
 
 **Rebuild and restart:**
@@ -102,7 +102,7 @@ docker-compose down
 ```bash
 ./docker-deploy.sh shell
 # or
-docker-compose exec ytdlp-test bash
+docker compose exec ytdlp-test bash
 ```
 
 ### Docker Features
@@ -250,7 +250,7 @@ cd ytdlp-test-service
 ./docker-deploy.sh build
 
 # Start with restart policy
-docker-compose up -d
+docker compose up -d
 
 # Monitor health
 ./docker-deploy.sh status
@@ -337,7 +337,46 @@ ytdlp-test-service/
 
 ### Docker Issues
 
-**Container won't start:**
+#### 🔄 **Code Changes Not Reflecting**
+
+**Problem**: You make changes to your code but they don't appear when you restart the container.
+
+**Root Cause**: Docker layer caching - Docker reuses cached layers from previous builds.
+
+**Solutions**:
+
+**Option 1: Force Rebuild (Recommended)**
+```bash
+# Clean everything and rebuild
+docker system prune -f
+docker compose up --build -d
+```
+
+**Option 2: Use Build Flag**
+```bash
+# Always use --build flag for development
+docker compose up --build -d
+```
+
+**Option 3: Use Deployment Script**
+```bash
+./docker-deploy.sh down
+./docker-deploy.sh build  # Forces rebuild
+./docker-deploy.sh up
+```
+
+**Option 4: Nuclear Option**
+```bash
+# Remove all images and rebuild
+docker rmi $(docker images -q) -f
+docker compose up --build -d
+```
+
+#### 🚫 **Container Won't Start**
+
+**Problem**: Container fails to start or exits immediately.
+
+**Solutions**:
 ```bash
 # Check Docker status
 docker ps -a
@@ -349,20 +388,49 @@ docker ps -a
 ./docker-deploy.sh build
 ```
 
-**Port conflicts:**
+#### 🔌 **Port Conflicts**
+
+**Problem**: Port 8090 is already in use.
+
+**Solutions**:
 ```bash
 # Check what's using port 8090
 lsof -i :8090
 
 # Use different port
 docker run -p 8091:8090 ytdlp-test-service
+
+# Or modify docker-compose.yml to use different port
 ```
 
-**Permission issues:**
+#### 🔐 **Permission Issues**
+
+**Problem**: Docker build fails with permission errors.
+
+**Solutions**:
 ```bash
 # Clean up and rebuild
 ./docker-deploy.sh clean
 ./docker-deploy.sh build
+
+# Check Docker daemon is running
+docker info
+```
+
+#### 🏗️ **Build Failures**
+
+**Problem**: Docker build fails with credential or network errors.
+
+**Solutions**:
+```bash
+# Fix Docker credentials (macOS)
+echo '{}' > ~/.docker/config.json
+
+# Check internet connection
+docker pull python:3.11-slim
+
+# Clean build cache
+docker builder prune -f
 ```
 
 ### Common Issues
