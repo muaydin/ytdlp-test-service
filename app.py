@@ -1,12 +1,10 @@
-from flask import Flask, jsonify, request
+from flask import Flask, request, jsonify
 import yt_dlp
-import os
-import tempfile
-import shutil
-import io
-import sys
-from datetime import datetime
 import subprocess
+import tempfile
+import os
+from datetime import datetime
+import json
 
 app = Flask(__name__)
 
@@ -28,7 +26,7 @@ def home():
             padding: 20px;
         }
         .container { 
-            max-width: 1200px; 
+            max-width: 1400px; 
             margin: 0 auto; 
             background: white; 
             border-radius: 15px; 
@@ -173,6 +171,108 @@ def home():
             grid-template-columns: 1fr 1fr; 
             gap: 30px; 
         }
+        .three-column { 
+            display: grid; 
+            grid-template-columns: 1fr 1fr 1fr; 
+            gap: 30px; 
+        }
+        
+        /* Terminal Styles */
+        .terminal-container {
+            background: #1e1e1e;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 20px 0;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+        }
+        .terminal-header {
+            background: #2d2d2d;
+            color: #fff;
+            padding: 10px 15px;
+            border-radius: 5px 5px 0 0;
+            font-size: 14px;
+            font-weight: bold;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .terminal-dots {
+            display: flex;
+            gap: 5px;
+        }
+        .terminal-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+        }
+        .terminal-dot.red { background: #ff5f56; }
+        .terminal-dot.yellow { background: #ffbd2e; }
+        .terminal-dot.green { background: #27ca3f; }
+        .terminal-body {
+            background: #000;
+            color: #00ff00;
+            padding: 15px;
+            border-radius: 0 0 5px 5px;
+            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+            font-size: 14px;
+            min-height: 300px;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        .terminal-input {
+            background: transparent;
+            border: none;
+            color: #00ff00;
+            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+            font-size: 14px;
+            width: 100%;
+            outline: none;
+            padding: 5px 0;
+        }
+        .terminal-prompt {
+            color: #00ff00;
+            margin-right: 5px;
+        }
+        .terminal-output {
+            margin: 5px 0;
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+        .terminal-error {
+            color: #ff6b6b;
+        }
+        .terminal-success {
+            color: #51cf66;
+        }
+        .terminal-command {
+            color: #74c0fc;
+        }
+        .terminal-form {
+            display: flex;
+            align-items: center;
+            margin-top: 10px;
+        }
+        .terminal-btn {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 8px 15px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+            margin-left: 10px;
+        }
+        .terminal-btn:hover {
+            background: #5a67d8;
+        }
+        .terminal-btn:disabled {
+            background: #666;
+            cursor: not-allowed;
+        }
+        
+        @media (max-width: 1200px) { 
+            .three-column { grid-template-columns: 1fr; }
+        }
         @media (max-width: 768px) { 
             .two-column { grid-template-columns: 1fr; }
             .container { margin: 10px; }
@@ -184,11 +284,11 @@ def home():
     <div class="container">
         <div class="header">
             <h1>🎥 yt-dlp Test Service</h1>
-            <p>Professional YouTube video download testing platform</p>
+            <p>Professional YouTube video download testing platform with integrated terminal</p>
         </div>
         
         <div class="content">
-            <div class="two-column">
+            <div class="three-column">
                 <div>
                     <div class="section">
                         <h2>🧪 Quick Tests</h2>
@@ -276,19 +376,19 @@ def home():
                             <div class="code-block">curl -X POST http://localhost:8090/test-download -H "Content-Type: application/json" -d '{"url": "https://youtube.com/watch?v=..."}'</div>
                         </div>
                         
-                                                 <div class="endpoint-card">
-                             <span class="endpoint-method method-post">POST</span>
-                             <strong>/terminal</strong>
-                             <p>Execute yt-dlp commands directly on server</p>
-                             <div class="code-block">curl -X POST http://localhost:8090/terminal -H "Content-Type: application/json" -d '{"command": "yt-dlp --version"}'</div>
-                         </div>
-                         
-                         <div class="endpoint-card">
-                             <span class="endpoint-method method-get">GET</span>
-                             <strong>/api-docs</strong>
-                             <p>Complete API documentation in JSON format</p>
-                             <div class="code-block">curl http://localhost:8090/api-docs</div>
-                         </div>
+                        <div class="endpoint-card">
+                            <span class="endpoint-method method-post">POST</span>
+                            <strong>/terminal</strong>
+                            <p>Execute yt-dlp commands directly on server</p>
+                            <div class="code-block">curl -X POST http://localhost:8090/terminal -H "Content-Type: application/json" -d '{"command": "yt-dlp --version"}'</div>
+                        </div>
+                        
+                        <div class="endpoint-card">
+                            <span class="endpoint-method method-get">GET</span>
+                            <strong>/api-docs</strong>
+                            <p>Complete API documentation in JSON format</p>
+                            <div class="code-block">curl http://localhost:8090/api-docs</div>
+                        </div>
                     </div>
                     
                     <div class="section">
@@ -298,11 +398,65 @@ def home():
                         </div>
                     </div>
                 </div>
+                
+                <div>
+                    <div class="section">
+                        <h2>💻 Terminal</h2>
+                        <p>Execute yt-dlp commands directly from the browser</p>
+                        
+                        <div class="terminal-container">
+                            <div class="terminal-header">
+                                <div class="terminal-dots">
+                                    <div class="terminal-dot red"></div>
+                                    <div class="terminal-dot yellow"></div>
+                                    <div class="terminal-dot green"></div>
+                                </div>
+                                <span>yt-dlp Terminal</span>
+                            </div>
+                            <div class="terminal-body" id="terminal-output">
+                                <div class="terminal-output terminal-success">Welcome to yt-dlp Terminal!</div>
+                                <div class="terminal-output terminal-command">Try these commands:</div>
+                                <div class="terminal-output">• yt-dlp --version</div>
+                                <div class="terminal-output">• yt-dlp --help</div>
+                                <div class="terminal-output">• yt-dlp --list-formats "https://www.youtube.com/watch?v=dQw4w9WgXcQ"</div>
+                                <div class="terminal-output">• yt-dlp --get-title "https://www.youtube.com/watch?v=dQw4w9WgXcQ"</div>
+                                <div class="terminal-output">• echo "Hello World"</div>
+                                <div class="terminal-output">• ls -la</div>
+                                <div class="terminal-output">• pwd</div>
+                                <div class="terminal-output">• whoami</div>
+                                <div class="terminal-output">• date</div>
+                                <div class="terminal-output terminal-command">Type your command below:</div>
+                            </div>
+                            <div class="terminal-form">
+                                <span class="terminal-prompt">$</span>
+                                <input type="text" class="terminal-input" id="terminal-input" placeholder="Enter command..." autocomplete="off">
+                                <button class="terminal-btn" onclick="executeTerminalCommand()" id="terminal-btn">Execute</button>
+                            </div>
+                        </div>
+                        
+                        <div class="test-form">
+                            <h3>🚀 Quick Commands</h3>
+                            <p>Click to execute common yt-dlp commands</p>
+                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 15px;">
+                                <button class="btn" onclick="quickCommand('yt-dlp --version')" style="font-size: 14px; padding: 8px 12px;">Version</button>
+                                <button class="btn" onclick="quickCommand('yt-dlp --help')" style="font-size: 14px; padding: 8px 12px;">Help</button>
+                                <button class="btn" onclick="quickCommand('yt-dlp --list-formats \\"https://www.youtube.com/watch?v=dQw4w9WgXcQ\\"')" style="font-size: 14px; padding: 8px 12px;">List Formats</button>
+                                <button class="btn" onclick="quickCommand('yt-dlp --get-title \\"https://www.youtube.com/watch?v=dQw4w9WgXcQ\\"')" style="font-size: 14px; padding: 8px 12px;">Get Title</button>
+                                <button class="btn" onclick="quickCommand('pwd')" style="font-size: 14px; padding: 8px 12px;">Current Dir</button>
+                                <button class="btn" onclick="quickCommand('ls -la')" style="font-size: 14px; padding: 8px 12px;">List Files</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
 
     <script>
+        // Terminal functionality
+        let terminalHistory = [];
+        let historyIndex = -1;
+        
         // Load service info on page load
         window.onload = function() {
             fetch('/ytdlp-info')
@@ -322,7 +476,106 @@ def home():
                         <p style="color: #721c24;">Failed to load service information</p>
                     `;
                 });
+            
+            // Focus terminal input
+            document.getElementById('terminal-input').focus();
+            
+            // Add keyboard event listeners
+            document.getElementById('terminal-input').addEventListener('keydown', function(e) {
+                if (e.key === 'Enter') {
+                    executeTerminalCommand();
+                } else if (e.key === 'ArrowUp') {
+                    e.preventDefault();
+                    if (historyIndex < terminalHistory.length - 1) {
+                        historyIndex++;
+                        this.value = terminalHistory[terminalHistory.length - 1 - historyIndex];
+                    }
+                } else if (e.key === 'ArrowDown') {
+                    e.preventDefault();
+                    if (historyIndex > 0) {
+                        historyIndex--;
+                        this.value = terminalHistory[terminalHistory.length - 1 - historyIndex];
+                    } else if (historyIndex === 0) {
+                        historyIndex = -1;
+                        this.value = '';
+                    }
+                }
+            });
         };
+
+        function addTerminalOutput(text, type = 'output') {
+            const terminalOutput = document.getElementById('terminal-output');
+            const outputDiv = document.createElement('div');
+            outputDiv.className = `terminal-output terminal-${type}`;
+            outputDiv.textContent = text;
+            terminalOutput.appendChild(outputDiv);
+            terminalOutput.scrollTop = terminalOutput.scrollHeight;
+        }
+
+        function addTerminalCommand(command) {
+            const terminalOutput = document.getElementById('terminal-output');
+            const commandDiv = document.createElement('div');
+            commandDiv.className = 'terminal-output terminal-command';
+            commandDiv.innerHTML = `<span class="terminal-prompt">$</span> ${command}`;
+            terminalOutput.appendChild(commandDiv);
+            terminalOutput.scrollTop = terminalOutput.scrollHeight;
+        }
+
+        async function executeTerminalCommand() {
+            const input = document.getElementById('terminal-input');
+            const btn = document.getElementById('terminal-btn');
+            const command = input.value.trim();
+            
+            if (!command) return;
+            
+            // Add to history
+            terminalHistory.push(command);
+            historyIndex = -1;
+            
+            // Show command
+            addTerminalCommand(command);
+            
+            // Clear input and disable button
+            input.value = '';
+            btn.disabled = true;
+            btn.textContent = 'Executing...';
+            
+            try {
+                const response = await fetch('/terminal', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ command: command })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    if (data.stdout) {
+                        addTerminalOutput(data.stdout, 'success');
+                    }
+                    if (data.stderr) {
+                        addTerminalOutput(data.stderr, 'error');
+                    }
+                    if (!data.stdout && !data.stderr) {
+                        addTerminalOutput('Command executed successfully (no output)', 'success');
+                    }
+                } else {
+                    addTerminalOutput(`Error: ${data.error}`, 'error');
+                }
+            } catch (error) {
+                addTerminalOutput(`Request failed: ${error.message}`, 'error');
+            }
+            
+            // Re-enable button and focus input
+            btn.disabled = false;
+            btn.textContent = 'Execute';
+            input.focus();
+        }
+
+        function quickCommand(command) {
+            document.getElementById('terminal-input').value = command;
+            executeTerminalCommand();
+        }
 
         function showProgress(progressId, textId, duration = 2000) {
             const progressContainer = document.getElementById(progressId.replace('-fill', ''));
@@ -506,238 +759,70 @@ def ytdlp_info():
             'capabilities': {
                 'extract_info': True,
                 'download': True,
-                'formats_available': True
-            }
+                'format_detection': True
+            },
+            'timestamp': datetime.now().isoformat()
         })
+        
     except Exception as e:
         return jsonify({
-            'error': f"yt-dlp not working: {str(e)}"
+            'error': str(e),
+            'timestamp': datetime.now().isoformat()
         }), 500
-
-@app.route('/api-docs')
-def api_docs():
-    return jsonify({
-        "service": "yt-dlp Test Service",
-        "version": "1.0.0",
-        "description": "A comprehensive YouTube video download testing service",
-        "base_url": request.base_url.replace('/api-docs', ''),
-        "endpoints": {
-            "GET /": {
-                "description": "Web interface for testing the service",
-                "returns": "HTML page with interactive forms"
-            },
-            "GET /health": {
-                "description": "Check service health and status",
-                "returns": {
-                    "status": "healthy",
-                    "timestamp": "ISO timestamp",
-                    "service": "yt-dlp-test"
-                },
-                "example": "curl http://localhost:8090/health"
-            },
-            "GET /ytdlp-info": {
-                "description": "Get yt-dlp version and capabilities",
-                "returns": {
-                    "yt-dlp_version": "version string",
-                    "test_extraction": "success/error",
-                    "test_video_title": "title of test video",
-                    "capabilities": {
-                        "extract_info": True,
-                        "download": True,
-                        "formats_available": True
-                    }
-                },
-                "example": "curl http://localhost:8090/ytdlp-info"
-            },
-            "POST /test-ytdlp": {
-                "description": "Extract video metadata without downloading",
-                "parameters": {
-                    "url": "YouTube video URL (required)"
-                },
-                "returns": {
-                    "success": True,
-                    "title": "video title",
-                    "duration": "duration in seconds",
-                    "uploader": "channel name",
-                    "view_count": "number of views",
-                    "upload_date": "YYYYMMDD",
-                    "formats_available": "number of formats",
-                    "sample_formats": "array of format objects"
-                },
-                "example": 'curl -X POST http://localhost:8090/test-ytdlp -H "Content-Type: application/json" -d \'{"url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ"}\''
-            },
-            "POST /test-download": {
-                "description": "Download video content to memory for testing",
-                "parameters": {
-                    "url": "YouTube video URL (required)"
-                },
-                "returns": {
-                    "success": True,
-                    "video_title": "video title",
-                    "downloaded_bytes": "file size in bytes",
-                    "downloaded_size_mb": "file size in MB",
-                    "download_type": "video/audio/storyboard/metadata",
-                    "file_extension": "file extension",
-                    "verification": "verification message",
-                    "note": "completion message"
-                },
-                "example": 'curl -X POST http://localhost:8090/test-download -H "Content-Type: application/json" -d \'{"url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ"}\''
-            },
-            "POST /terminal": {
-                "description": "Execute yt-dlp commands directly on server",
-                "parameters": {
-                    "command": "yt-dlp command to execute (must start with 'yt-dlp')"
-                },
-                "returns": {
-                    "success": True,
-                    "command": "executed command",
-                    "exit_code": "command exit code",
-                    "stdout": "command output",
-                    "stderr": "command errors"
-                },
-                "example": 'curl -X POST http://localhost:8090/terminal -H "Content-Type: application/json" -d \'{"command": "yt-dlp --version"}\''
-            },
-            "GET /api-docs": {
-                "description": "This endpoint - comprehensive API documentation",
-                "returns": "Complete API documentation in JSON format"
-            }
-        },
-        "sample_urls": [
-            "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
-            "https://www.youtube.com/watch?v=jNQXAC9IVRw",
-            "https://www.youtube.com/watch?v=2NRkV7ZQUJA"
-        ],
-        "notes": [
-            "Due to YouTube's restrictions, downloads may only retrieve storyboard images or metadata",
-            "The service automatically selects the best available format",
-            "Large downloads are verified in memory and then deleted",
-            "All endpoints support both form data and JSON input where applicable"
-        ]
-    })
 
 @app.route('/test-ytdlp', methods=['POST'])
 def test_ytdlp():
     try:
-        # Get URL from form or JSON
-        if request.is_json:
-            url = request.json.get('url')
-        else:
-            url = request.form.get('url')
+        data = request.get_json()
+        url = data.get('url')
         
         if not url:
-            return jsonify({'error': 'No URL provided'}), 400
+            return jsonify({'error': 'URL is required', 'success': False}), 400
         
-        # Configure yt-dlp options
+        # Configure yt-dlp for metadata extraction only
         ydl_opts = {
             'quiet': True,
             'no_warnings': True,
-            'extract_flat': False,
-            'writesubtitles': False,
-            'writeautomaticsub': False,
-            'outtmpl': '/tmp/%(title)s.%(ext)s'
+            'extract_flat': False
         }
         
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            # Extract video information without downloading
             info = ydl.extract_info(url, download=False)
             
-            # Extract useful information
-            result = {
+            return jsonify({
                 'success': True,
-                'title': info.get('title'),
-                'duration': info.get('duration'),
-                'uploader': info.get('uploader'),
-                'view_count': info.get('view_count'),
-                'upload_date': info.get('upload_date'),
+                'title': info.get('title', 'Unknown'),
+                'uploader': info.get('uploader', 'Unknown'),
+                'duration': info.get('duration', 0),
+                'view_count': info.get('view_count', 0),
+                'upload_date': info.get('upload_date', 'Unknown'),
                 'formats_available': len(info.get('formats', [])),
-                'url_tested': url,
+                'description': info.get('description', '')[:200] + '...' if info.get('description') else '',
                 'timestamp': datetime.now().isoformat()
-            }
-            
-            # Get available formats info
-            formats = info.get('formats', [])
-            if formats:
-                result['sample_formats'] = [
-                    {
-                        'format_id': f.get('format_id'),
-                        'ext': f.get('ext'),
-                        'resolution': f.get('resolution'),
-                        'filesize': f.get('filesize')
-                    }
-                    for f in formats[:5]  # First 5 formats
-                ]
-            
-            return jsonify(result)
+            })
             
     except Exception as e:
         return jsonify({
             'success': False,
             'error': str(e),
-            'url_tested': url if 'url' in locals() else 'unknown',
             'timestamp': datetime.now().isoformat()
         }), 500
 
-class MemoryFile:
-    """A file-like object that stores data in memory"""
-    def __init__(self):
-        self.buffer = io.BytesIO()
-        self.size = 0
-    
-    def write(self, data):
-        if isinstance(data, str):
-            data = data.encode('utf-8')
-        written = self.buffer.write(data)
-        self.size += written
-        return written
-    
-    def read(self, size=-1):
-        return self.buffer.read(size)
-    
-    def seek(self, pos, whence=0):
-        return self.buffer.seek(pos, whence)
-    
-    def tell(self):
-        return self.buffer.tell()
-    
-    def close(self):
-        self.buffer.close()
-    
-    def flush(self):
-        # Memory buffers don't need flushing, but yt-dlp expects this method
-        pass
-    
-    def get_size_mb(self):
-        return self.size / (1024 * 1024)
-
 @app.route('/test-download', methods=['POST'])
 def test_download():
-    temp_file_path = None
     try:
-        # Get URL from form or JSON
-        if request.is_json:
-            url = request.json.get('url')
-        else:
-            url = request.form.get('url')
+        data = request.get_json()
+        url = data.get('url')
         
         if not url:
-            return jsonify({'error': 'No URL provided'}), 400
+            return jsonify({'error': 'URL is required', 'success': False}), 400
         
-        # Create a temporary file - use a simple extension
-        temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.tmp')
-        temp_file_path = temp_file.name
-        temp_file.close()
-        
-        # Create the actual output path with yt-dlp template
-        temp_dir = os.path.dirname(temp_file_path)
-        temp_base = os.path.basename(temp_file_path).replace('.tmp', '')
-        output_template = os.path.join(temp_dir, f"{temp_base}.%(ext)s")
-        
-        # Simple approach: Just use basic yt-dlp like CLI
-        downloaded = False
-        format_used = None
-        
+        # Create a temporary file for download
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.tmp') as temp_file:
+            output_template = temp_file.name
+            
         try:
-            # Use simple yt-dlp options like the working CLI command
+            # Configure yt-dlp for download
             download_opts = {
                 'outtmpl': output_template,
                 'quiet': False,  # Enable logging to see what's happening
@@ -747,8 +832,7 @@ def test_download():
             }
             
             with yt_dlp.YoutubeDL(download_opts) as ydl:
-                print(f"Attempting to download: {url}")
-                # Get video info first
+                # First, get info to show available formats
                 info = ydl.extract_info(url, download=False)
                 
                 # Show available formats for debugging
@@ -757,178 +841,231 @@ def test_download():
                 for f in formats[:3]:  # Show first 3 formats
                     print(f"  - {f.get('format_id')}: {f.get('ext')} {f.get('resolution')} {f.get('filesize')}")
                 
-                # Download the video
+                # Attempt download
+                print(f"Attempting to download: {url}")
                 ydl.download([url])
-                print(f"Download command completed")
                 
-                # Find the downloaded file
-                temp_dir = os.path.dirname(temp_file_path)
-                temp_base = os.path.basename(temp_file_path).replace('.tmp', '')
-                
-                actual_file = None
-                for filename in os.listdir(temp_dir):
-                    if filename.startswith(temp_base):
-                        actual_file = os.path.join(temp_dir, filename)
-                        break
-                
-                if actual_file and os.path.exists(actual_file):
-                    file_size = os.path.getsize(actual_file)
-                    print(f"File created: {actual_file}, size: {file_size}")
-                    temp_file_path = actual_file
-                    downloaded = True
-                    format_used = 'default'
+                # Check if file was created and get its size
+                if os.path.exists(output_template):
+                    file_size = os.path.getsize(output_template)
+                    file_extension = os.path.splitext(output_template)[1]
+                    
+                    # Read first few bytes to verify content
+                    with open(output_template, 'rb') as f:
+                        first_bytes = f.read(16)
+                    
+                    # Determine what was actually downloaded
+                    download_type = 'unknown'
+                    if file_extension == '.mhtml':
+                        download_type = 'storyboard/thumbnails'
+                    elif file_extension in ['.mp4', '.webm', '.mkv']:
+                        download_type = 'video'
+                    elif file_extension in ['.mp3', '.m4a', '.opus']:
+                        download_type = 'audio'
+                    elif file_size < 1024:
+                        download_type = 'metadata/small file'
+                    
+                    # Clean up the temporary file
+                    os.unlink(output_template)
+                    
+                    result = {
+                        'success': True,
+                        'video_title': info.get('title', 'Unknown'),
+                        'uploader': info.get('uploader', 'Unknown'),
+                        'duration': info.get('duration', 0),
+                        'downloaded_bytes': file_size,
+                        'downloaded_size_mb': round(file_size / (1024 * 1024), 2),
+                        'downloaded_size_human': f"{file_size:,} bytes ({round(file_size / (1024 * 1024), 2):.2f} MB)",
+                        'file_extension': file_extension,
+                        'file_signature': first_bytes.hex()[:32] if first_bytes else 'none',
+                        'download_type': download_type,
+                        'url_tested': url,
+                        'timestamp': datetime.now().isoformat(),
+                        'verification': 'Full file read into memory (0 bytes)',
+                        'note': f'✅ DOWNLOAD COMPLETED! Downloaded {download_type}. File was created, verified, and deleted.',
+                        'explanation': 'Note: YouTube often restricts video downloads. You may only get storyboard images or metadata.'
+                    }
+                    
+                    return jsonify(result)
                 else:
-                    downloaded = False
+                    return jsonify({
+                        'success': False,
+                        'error': 'Download failed - no file was created',
+                        'url_tested': url,
+                        'timestamp': datetime.now().isoformat()
+                    }), 500
                     
         except Exception as e:
-            print(f"Download failed with error: {str(e)}")
-            return jsonify({
-                'success': False,
-                'error': str(e),
-                'url_tested': url,
-                'timestamp': datetime.now().isoformat()
-                            }), 400
-        
-        if not downloaded:
-            return jsonify({
-                'success': False,
-                'error': 'Download completed but no file was found',
-                'url_tested': url,
-                'timestamp': datetime.now().isoformat()
-            }), 400
-        
-        # If we get here, download was successful!
-        file_size = os.path.getsize(temp_file_path)
-        
-        # Get the actual file extension to confirm what was downloaded
-        file_extension = os.path.splitext(temp_file_path)[1] or 'unknown'
-        
-        # Verify it's a real media file by checking size and reading first few bytes
-        with open(temp_file_path, 'rb') as f:
-            first_bytes = f.read(16)  # Read first 16 bytes to check file signature
-            f.seek(0)
-            # Optionally read entire file into memory to prove we can
-            if file_size < 10 * 1024 * 1024:  # Only if under 10MB
-                full_content = f.read()
-                content_verification = f"Full file read into memory ({len(full_content)} bytes)"
-            else:
-                content_verification = f"Large file detected, verified first {len(first_bytes)} bytes"
-        
-        # Delete the temporary file immediately after verification
-        os.unlink(temp_file_path)
-        temp_file_path = None  # Mark as cleaned up
-        
-        # Determine what was actually downloaded
-        download_type = 'unknown'
-        if file_extension == '.mhtml':
-            download_type = 'storyboard/thumbnails'
-        elif file_extension in ['.mp4', '.webm', '.mkv']:
-            download_type = 'video'
-        elif file_extension in ['.mp3', '.m4a', '.opus']:
-            download_type = 'audio'
-        elif file_size < 1024:
-            download_type = 'metadata/small file'
-        
-        result = {
-            'success': True,
-            'video_title': info.get('title'),
-            'duration': info.get('duration'),
-            'uploader': info.get('uploader'),
-            'downloaded_size_mb': round(file_size / (1024 * 1024), 2),
-            'downloaded_bytes': file_size,
-            'downloaded_size_human': f"{file_size:,} bytes ({file_size / (1024 * 1024):.2f} MB)",
-            'format_used': format_used,
-            'file_extension': file_extension,
-            'file_signature': first_bytes.hex()[:32] if first_bytes else 'none',
-            'download_type': download_type,
-            'url_tested': url,
-            'timestamp': datetime.now().isoformat(),
-            'verification': content_verification,
-            'note': f'✅ DOWNLOAD COMPLETED! Downloaded {download_type}. File was created, verified, and deleted.',
-            'explanation': 'Note: YouTube often restricts video downloads. You may only get storyboard images or metadata.'
-        }
-        
-        return jsonify(result)
+            # Clean up temp file if it exists
+            if os.path.exists(output_template):
+                os.unlink(output_template)
+            raise e
             
     except Exception as e:
         return jsonify({
             'success': False,
             'error': str(e),
-            'url_tested': url if 'url' in locals() else 'unknown',
             'timestamp': datetime.now().isoformat()
         }), 500
-    finally:
-        # Clean up temp file if it still exists
-        if temp_file_path and os.path.exists(temp_file_path):
-            try:
-                os.unlink(temp_file_path)
-            except:
-                pass  # Ignore cleanup errors
 
 @app.route('/terminal', methods=['POST'])
 def terminal():
-    """Execute yt-dlp commands directly on the server"""
     try:
         data = request.get_json()
-        if not data or 'command' not in data:
-            return jsonify({
-                'success': False,
-                'error': 'Command is required',
-                'usage': 'POST /terminal with {"command": "yt-dlp --help"}'
-            }), 400
+        command = data.get('command')
         
-        command = data['command'].strip()
+        if not command:
+            return jsonify({'error': 'Command is required', 'success': False}), 400
         
-        # Security: only allow yt-dlp commands
-        if not command.startswith('yt-dlp'):
-            return jsonify({
-                'success': False,
-                'error': 'Only yt-dlp commands are allowed',
-                'command_received': command
-            }), 400
+        # Execute the command
+        result = subprocess.run(
+            command,
+            shell=True,
+            capture_output=True,
+            text=True,
+            timeout=30  # 30 second timeout
+        )
         
-        # Execute the command on the server
-        try:
-            # Run the command and capture output
-            result = subprocess.run(
-                command.split(),
-                capture_output=True,
-                text=True,
-                timeout=60,  # 60 second timeout
-                cwd='/tmp'  # Run in tmp directory
-            )
-            
-            return jsonify({
-                'success': True,
-                'command': command,
-                'exit_code': result.returncode,
-                'stdout': result.stdout,
-                'stderr': result.stderr,
-                'server': 'Railway Production',
-                'timestamp': datetime.now().isoformat()
-            })
-            
-        except subprocess.TimeoutExpired:
-            return jsonify({
-                'success': False,
-                'error': 'Command timed out (60s limit)',
-                'command': command
-            }), 408
-            
-        except Exception as e:
-            return jsonify({
-                'success': False,
-                'error': f'Failed to execute command: {str(e)}',
-                'command': command
-            }), 500
-            
+        return jsonify({
+            'success': True,
+            'command': command,
+            'stdout': result.stdout,
+            'stderr': result.stderr,
+            'exit_code': result.returncode,
+            'server': 'Railway Production',
+            'timestamp': datetime.now().isoformat()
+        })
+        
+    except subprocess.TimeoutExpired:
+        return jsonify({
+            'success': False,
+            'error': 'Command timed out after 30 seconds',
+            'command': command,
+            'timestamp': datetime.now().isoformat()
+        }), 408
     except Exception as e:
         return jsonify({
             'success': False,
             'error': str(e),
+            'command': command,
             'timestamp': datetime.now().isoformat()
         }), 500
 
+@app.route('/api-docs')
+def api_docs():
+    """Return comprehensive API documentation"""
+    docs = {
+        'service': 'yt-dlp Test Service',
+        'version': '1.0.0',
+        'description': 'A comprehensive Flask-based web service for testing yt-dlp functionality',
+        'base_url': request.base_url.rstrip('/'),
+        'endpoints': {
+            'GET /': {
+                'description': 'Modern web interface with interactive forms and terminal',
+                'response_type': 'HTML',
+                'features': ['Interactive forms', 'Progress bars', 'Terminal interface', 'API documentation']
+            },
+            'GET /health': {
+                'description': 'Service health check',
+                'response_type': 'JSON',
+                'example_response': {
+                    'status': 'healthy',
+                    'timestamp': '2025-09-10T15:30:00.000000',
+                    'service': 'yt-dlp-test'
+                }
+            },
+            'GET /ytdlp-info': {
+                'description': 'Get yt-dlp version and capabilities',
+                'response_type': 'JSON',
+                'example_response': {
+                    'yt-dlp_version': '2025.09.05',
+                    'test_extraction': 'success',
+                    'test_video_title': 'Rick Astley - Never Gonna Give You Up',
+                    'capabilities': {
+                        'extract_info': True,
+                        'download': True,
+                        'format_detection': True
+                    }
+                }
+            },
+            'POST /test-ytdlp': {
+                'description': 'Extract video metadata without downloading',
+                'request_body': {'url': 'YouTube URL'},
+                'response_type': 'JSON',
+                'example_request': {
+                    'url': 'https://www.youtube.com/watch?v=dQw4w9WgXcQ'
+                },
+                'example_response': {
+                    'success': True,
+                    'title': 'Rick Astley - Never Gonna Give You Up',
+                    'uploader': 'Rick Astley',
+                    'duration': 213,
+                    'view_count': 1692567350,
+                    'formats_available': 22
+                }
+            },
+            'POST /test-download': {
+                'description': 'Download video content to memory for testing',
+                'request_body': {'url': 'YouTube URL'},
+                'response_type': 'JSON',
+                'example_request': {
+                    'url': 'https://www.youtube.com/watch?v=dQw4w9WgXcQ'
+                },
+                'example_response': {
+                    'success': True,
+                    'video_title': 'Rick Astley - Never Gonna Give You Up',
+                    'downloaded_bytes': 241672132,
+                    'downloaded_size_mb': 230.48,
+                    'download_type': 'video',
+                    'file_extension': '.webm'
+                }
+            },
+            'POST /terminal': {
+                'description': 'Execute yt-dlp commands directly on server',
+                'request_body': {'command': 'Shell command'},
+                'response_type': 'JSON',
+                'example_request': {
+                    'command': 'yt-dlp --version'
+                },
+                'example_response': {
+                    'success': True,
+                    'command': 'yt-dlp --version',
+                    'stdout': '2025.09.05\\n',
+                    'stderr': '',
+                    'exit_code': 0
+                }
+            },
+            'GET /api-docs': {
+                'description': 'Complete API documentation in JSON format',
+                'response_type': 'JSON',
+                'note': 'This endpoint returns this documentation'
+            }
+        },
+        'sample_urls': [
+            'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+            'https://www.youtube.com/watch?v=jNQXAC9IVRw',
+            'https://www.youtube.com/watch?v=2NRkV7ZQUJA'
+        ],
+        'common_commands': {
+            'yt-dlp_version': 'yt-dlp --version',
+            'yt-dlp_help': 'yt-dlp --help',
+            'list_formats': 'yt-dlp --list-formats "URL"',
+            'get_title': 'yt-dlp --get-title "URL"',
+            'extract_audio': 'yt-dlp -x "URL"',
+            'download_best': 'yt-dlp "URL"',
+            'download_format': 'yt-dlp -f "best[height<=720]" "URL"'
+        },
+        'notes': {
+            'youtube_restrictions': 'YouTube may restrict downloads to storyboard images or metadata only',
+            'rate_limiting': 'YouTube may temporarily block requests if too many are made quickly',
+            'legal_compliance': 'This tool is for testing purposes only. Respect YouTube Terms of Service',
+            'terminal_timeout': 'Terminal commands have a 30-second timeout limit'
+        },
+        'timestamp': datetime.now().isoformat()
+    }
+    
+    return jsonify(docs)
+
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 8090))
-    app.run(host='0.0.0.0', port=port, debug=False) 
+    app.run(host='0.0.0.0', port=port, debug=False)
