@@ -15,6 +15,7 @@ A comprehensive Flask-based web service for testing yt-dlp (YouTube video downlo
 - **⬇️ Download Testing**: Test actual video downloads to memory with verification
 - **🔗 RESTful API**: Complete REST API with JSON responses
 - **📚 API Documentation**: Built-in comprehensive API documentation
+- **💻 Interactive Terminal**: Built-in terminal for running yt-dlp commands directly from browser
 - **🐋 Docker Ready**: Complete Docker setup with Compose and deployment scripts
 - **🛡️ Security**: Input validation and sandboxed command execution
 - **📱 Mobile Responsive**: Works perfectly on desktop and mobile devices
@@ -58,16 +59,57 @@ The service will start on `http://localhost:8090`
 
 ## 🐋 Docker Usage Guide
 
-### Quick Commands
+### Complete Command Reference
 
 | Command | Description |
 |---------|-------------|
-| `./docker-deploy.sh up` | Start the service |
-| `./docker-deploy.sh down` | Stop the service |
+| `./docker-deploy.sh build` | Build the Docker image |
+| `./docker-deploy.sh up` | Start services with Docker Compose |
+| `./docker-deploy.sh up-fresh` | Start services with fresh build (no cache) |
+| `./docker-deploy.sh dev` | **Development mode**: Stop + rebuild + start (recommended) |
+| `./docker-deploy.sh down` | Stop services |
+| `./docker-deploy.sh restart` | Restart services |
+| `./docker-deploy.sh restart-fresh` | Restart services with fresh build (no cache) |
 | `./docker-deploy.sh logs` | View service logs |
 | `./docker-deploy.sh status` | Check service status |
 | `./docker-deploy.sh test` | Run API tests |
-| `./docker-deploy.sh clean` | Remove everything |
+| `./docker-deploy.sh shell` | Open shell in the container |
+| `./docker-deploy.sh clean` | Remove all containers, images, and volumes (DANGEROUS) |
+| `./docker-deploy.sh help` | Show help message |
+
+### Development Workflow (Recommended)
+
+**For active development with code changes:**
+```bash
+# Recommended: Reflects all code changes
+./docker-deploy.sh dev
+
+# Alternative: Start with fresh build
+./docker-deploy.sh up-fresh
+
+# Alternative: Restart with fresh build
+./docker-deploy.sh restart-fresh
+```
+
+### Production Workflow
+
+**For production deployment:**
+```bash
+# Build the image
+./docker-deploy.sh build
+
+# Start the service
+./docker-deploy.sh up
+
+# Test the running service
+./docker-deploy.sh test
+
+# View logs
+./docker-deploy.sh logs
+
+# Stop the service
+./docker-deploy.sh down
+```
 
 ### Detailed Docker Commands
 
@@ -166,13 +208,18 @@ curl -X POST http://localhost:8090/test-ytdlp \
 curl -X POST http://localhost:8090/test-download \
   -H "Content-Type: application/json" \
   -d '{"url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ"}'
+
+# Test terminal command
+curl -X POST http://localhost:8090/terminal \
+  -H "Content-Type: application/json" \
+  -d '{"command": "yt-dlp --version"}'
 ```
 
 ## 📋 API Endpoints
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| `GET` | `/` | Modern web interface with interactive forms |
+| `GET` | `/` | Modern web interface with interactive forms and terminal |
 | `GET` | `/health` | Service health check |
 | `GET` | `/ytdlp-info` | yt-dlp version and capabilities |
 | `POST` | `/test-ytdlp` | Extract video metadata |
@@ -206,6 +253,17 @@ curl -X POST http://localhost:8090/test-download \
 }
 ```
 
+**Terminal Command (`/terminal`)**:
+```json
+{
+  "success": true,
+  "command": "yt-dlp --version",
+  "stdout": "2025.09.05\n",
+  "stderr": "",
+  "exit_code": 0
+}
+```
+
 ## 🌐 Web Interface
 
 The modern web interface includes:
@@ -213,8 +271,10 @@ The modern web interface includes:
 - **Interactive Forms**: Real-time form validation and submission
 - **Progress Bars**: Visual feedback during processing
 - **Result Display**: Formatted success/error messages
+- **Interactive Terminal**: Built-in terminal for running yt-dlp commands
 - **API Documentation**: Built-in endpoint documentation
 - **Sample URLs**: Pre-filled test URLs for quick testing
+- **Quick Commands**: One-click buttons for common operations
 - **Mobile Responsive**: Optimized for all screen sizes
 
 ## 🔧 Configuration
@@ -332,6 +392,7 @@ ytdlp-test-service/
 - **Rate Limiting**: YouTube may temporarily block requests if too many are made quickly.
 - **Legal Compliance**: This tool is for testing purposes only. Respect YouTube's Terms of Service and copyright laws.
 - **Docker Requirements**: Docker Desktop or Docker Engine required for containerized deployment.
+- **Terminal Timeout**: Terminal commands have a 30-second timeout limit.
 
 ## 🐛 Troubleshooting
 
@@ -440,12 +501,14 @@ docker builder prune -f
 3. **yt-dlp errors**: Check `/ytdlp-info` endpoint for status
 4. **Download failures**: Usually due to YouTube restrictions (expected)
 5. **Docker not found**: Install Docker Desktop or Docker Engine
+6. **Terminal commands timeout**: Commands have 30-second limit
 
 ### Getting Help
 - Check the built-in API documentation: `http://localhost:8090/api-docs`
 - Review the test script output: `./test_local.sh` or `./docker-deploy.sh test`
 - Enable debug mode: `FLASK_ENV=development python app.py`
 - View Docker logs: `./docker-deploy.sh logs`
+- Use the interactive terminal: `http://localhost:8090` (Terminal section)
 
 ## 📄 License
 
