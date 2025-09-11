@@ -65,6 +65,20 @@ case $ACTION in
         print_success "Services started! Access the app at: http://localhost:8090"
         ;;
     
+    "up-fresh")
+        print_status "Starting services with fresh build (no cache)..."
+        $COMPOSE_CMD up --build --no-cache -d
+        print_success "Services started with fresh build! Access the app at: http://localhost:8090"
+        ;;
+    
+    "dev")
+        print_status "Development mode: Stopping, rebuilding, and starting services..."
+        $COMPOSE_CMD down
+        print_status "Building with cache invalidation..."
+        $COMPOSE_CMD up --build -d
+        print_success "Development environment ready! Access the app at: http://localhost:8090"
+        ;;
+    
     "down")
         print_status "Stopping services..."
         $COMPOSE_CMD down
@@ -76,6 +90,13 @@ case $ACTION in
         $COMPOSE_CMD down
         $COMPOSE_CMD up -d
         print_success "Services restarted! Access the app at: http://localhost:8090"
+        ;;
+    
+    "restart-fresh")
+        print_status "Restarting services with fresh build..."
+        $COMPOSE_CMD down
+        $COMPOSE_CMD up --build --no-cache -d
+        print_success "Services restarted with fresh build! Access the app at: http://localhost:8090"
         ;;
     
     "logs")
@@ -145,25 +166,33 @@ case $ACTION in
         ;;
     
     "help"|*)
-        echo "Usage: $0 {build|up|down|restart|logs|status|clean|test|shell|help}"
+        echo "Usage: $0 {build|up|up-fresh|dev|down|restart|restart-fresh|logs|status|clean|test|shell|help}"
         echo ""
         echo "Commands:"
-        echo "  build     - Build the Docker image"
-        echo "  up        - Start services with Docker Compose"
-        echo "  down      - Stop services"
-        echo "  restart   - Restart services"
-        echo "  logs      - Show service logs"
-        echo "  status    - Show service status"
-        echo "  clean     - Remove all containers, images, and volumes"
-        echo "  test      - Run basic tests against the service"
-        echo "  shell     - Open shell in the container"
-        echo "  help      - Show this help message"
+        echo "  build         - Build the Docker image"
+        echo "  up            - Start services with Docker Compose"
+        echo "  up-fresh      - Start services with fresh build (no cache)"
+        echo "  dev           - Development mode: down + build + up (recommended for development)"
+        echo "  down          - Stop services"
+        echo "  restart       - Restart services"
+        echo "  restart-fresh - Restart services with fresh build (no cache)"
+        echo "  logs          - Show service logs"
+        echo "  status        - Show service status"
+        echo "  clean         - Remove all containers, images, and volumes (DANGEROUS)"
+        echo "  test          - Run basic tests against the service"
+        echo "  shell         - Open shell in the container"
+        echo "  help          - Show this help message"
         echo ""
-        echo "Examples:"
-        echo "  $0 build    # Build the image"
-        echo "  $0 up       # Start the service"
-        echo "  $0 test     # Test the running service"
-        echo "  $0 logs     # View logs"
-        echo "  $0 down     # Stop the service"
+        echo "Development Workflow:"
+        echo "  $0 dev         # Recommended: Stop, rebuild, and start (reflects code changes)"
+        echo "  $0 up-fresh    # Alternative: Start with fresh build"
+        echo "  $0 restart-fresh # Alternative: Restart with fresh build"
+        echo ""
+        echo "Production Workflow:"
+        echo "  $0 build       # Build the image"
+        echo "  $0 up          # Start the service"
+        echo "  $0 test        # Test the running service"
+        echo "  $0 logs        # View logs"
+        echo "  $0 down        # Stop the service"
         ;;
-esac 
+esac
