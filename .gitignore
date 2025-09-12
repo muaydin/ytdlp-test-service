@@ -42,4 +42,4 @@ Thumbs.db
 /tmp/flask-test-*
 
 # Railway
-.railway/ 
+.railway/ kubeconfig.yaml
