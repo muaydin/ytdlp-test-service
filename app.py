@@ -817,9 +817,9 @@ def test_download():
         if not url:
             return jsonify({'error': 'URL is required', 'success': False}), 400
         
-        # Create a temporary file for download
-        with tempfile.NamedTemporaryFile(delete=False, suffix='.tmp') as temp_file:
-            output_template = temp_file.name
+        # Create a temporary file path (but don't create the file yet)
+        temp_dir = tempfile.gettempdir()
+        output_template = os.path.join(temp_dir, f"ytdlp_test_{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}.%(ext)s")
             
         try:
             # Configure yt-dlp for download
@@ -827,8 +827,8 @@ def test_download():
                 'outtmpl': output_template,
                 'quiet': False,  # Enable logging to see what's happening
                 'no_warnings': False,  # Show warnings to debug
-                # Try specific formats including DRC versions and fallbacks
-                'format': '249-drc/249/250-drc/250/140-drc/140/251-drc/251/160/278/394/133/best[filesize<10M]/worst',
+                # Try audio formats first (smaller files), then video formats
+                'format': '140/249/250/251/bestaudio[filesize<10M]/best[filesize<10M]/worst',
             }
             
             with yt_dlp.YoutubeDL(download_opts) as ydl:
@@ -845,13 +845,21 @@ def test_download():
                 print(f"Attempting to download: {url}")
                 ydl.download([url])
                 
-                # Check if file was created and get its size
-                if os.path.exists(output_template):
-                    file_size = os.path.getsize(output_template)
-                    file_extension = os.path.splitext(output_template)[1]
+                # Find the actual downloaded file (yt-dlp replaces %(ext)s with actual extension)
+                base_path = output_template.replace('.%(ext)s', '')
+                downloaded_file = None
+                for ext in ['.m4a', '.mp4', '.webm', '.opus', '.mp3', '.mkv', '.mhtml']:
+                    potential_file = base_path + ext
+                    if os.path.exists(potential_file):
+                        downloaded_file = potential_file
+                        break
+                
+                if downloaded_file and os.path.exists(downloaded_file):
+                    file_size = os.path.getsize(downloaded_file)
+                    file_extension = os.path.splitext(downloaded_file)[1]
                     
                     # Read first few bytes to verify content
-                    with open(output_template, 'rb') as f:
+                    with open(downloaded_file, 'rb') as f:
                         first_bytes = f.read(16)
                     
                     # Determine what was actually downloaded
@@ -864,9 +872,11 @@ def test_download():
                         download_type = 'audio'
                     elif file_size < 1024:
                         download_type = 'metadata/small file'
+                    else:
+                        download_type = 'media file'
                     
                     # Clean up the temporary file
-                    os.unlink(output_template)
+                    os.unlink(downloaded_file)
                     
                     result = {
                         'success': True,
@@ -896,9 +906,12 @@ def test_download():
                     }), 500
                     
         except Exception as e:
-            # Clean up temp file if it exists
-            if os.path.exists(output_template):
-                os.unlink(output_template)
+            # Clean up temp files if they exist
+            base_path = output_template.replace('.%(ext)s', '')
+            for ext in ['.m4a', '.mp4', '.webm', '.opus', '.mp3', '.mkv', '.mhtml']:
+                potential_file = base_path + ext
+                if os.path.exists(potential_file):
+                    os.unlink(potential_file)
             raise e
             
     except Exception as e:
