@@ -5,6 +5,8 @@ import tempfile
 import os
 from datetime import datetime
 import json
+import requests
+import shutil
 
 app = Flask(__name__)
 
@@ -333,6 +335,63 @@ def home():
                             <div class="result-container" id="download-result"></div>
                         </div>
                         
+                        <div class="test-form">
+                            <h3>📝 Caption Extraction</h3>
+                            <p>Extract video captions/subtitles in available languages. This feature detects available caption languages and downloads the caption content.</p>
+                            
+                            <form id="captions-form" onsubmit="testCaptions(event)">
+                                <div class="form-group">
+                                    <label for="captions-url">YouTube URL:</label>
+                                    <input type="text" id="captions-url" name="url" 
+                                           placeholder="https://www.youtube.com/watch?v=..." required>
+                                </div>
+                                
+                                <div class="form-group" id="language-selection" style="display: none;">
+                                    <label for="preferred-language">Preferred Language (optional):</label>
+                                    <select id="preferred-language">
+                                        <option value="">Auto-select best available</option>
+                                        <option value="en">English</option>
+                                        <option value="es">Spanish</option>
+                                        <option value="fr">French</option>
+                                        <option value="de">German</option>
+                                        <option value="it">Italian</option>
+                                        <option value="pt">Portuguese</option>
+                                        <option value="ja">Japanese</option>
+                                        <option value="ko">Korean</option>
+                                        <option value="zh">Chinese</option>
+                                        <option value="ru">Russian</option>
+                                    </select>
+                                </div>
+                                
+                                <button type="submit" class="btn" id="captions-btn">Extract Captions</button>
+                            </form>
+                            
+                            <div class="progress-container" id="captions-progress">
+                                <div class="progress-bar">
+                                    <div class="progress-fill" id="captions-progress-fill"></div>
+                                </div>
+                                <div class="progress-text" id="captions-progress-text">Extracting captions...</div>
+                            </div>
+                            
+                            <div class="result-container" id="captions-result"></div>
+                            
+                            <!-- Quick test buttons -->
+                            <div style="margin-top: 20px; padding: 15px; background: #f8f9fa; border-radius: 8px; border-left: 4px solid #667eea;">
+                                <h4 style="margin: 0 0 10px 0; font-size: 16px;">🎬 Quick Test Videos</h4>
+                                <p style="margin: 0 0 10px 0; font-size: 14px; color: #666;">Click to test with popular videos that have captions:</p>
+                                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+                                    <button class="btn" onclick="loadTestVideo('https://www.youtube.com/watch?v=jNQXAC9IVRw', 'Me at the zoo (First YouTube video)')" 
+                                            style="font-size: 13px; padding: 6px 10px;">Me at the zoo</button>
+                                    <button class="btn" onclick="loadTestVideo('https://www.youtube.com/watch?v=dQw4w9WgXcQ', 'Rick Astley - Never Gonna Give You Up')" 
+                                            style="font-size: 13px; padding: 6px 10px;">Never Gonna Give You Up</button>
+                                    <button class="btn" onclick="loadTestVideo('https://www.youtube.com/watch?v=9bZkp7q19f0', 'PSY - GANGNAM STYLE')" 
+                                            style="font-size: 13px; padding: 6px 10px;">Gangnam Style</button>
+                                    <button class="btn" onclick="loadTestVideo('https://www.youtube.com/watch?v=kJQP7kiw5Fk', 'Luis Fonsi - Despacito')" 
+                                            style="font-size: 13px; padding: 6px 10px;">Despacito</button>
+                                </div>
+                            </div>
+                        </div>
+                        
                         <div class="sample-urls">
                             <h4>📝 Sample URLs for Testing:</h4>
                             <ul>
@@ -374,6 +433,13 @@ def home():
                             <strong>/test-download</strong>
                             <p>Download video content to memory for testing</p>
                             <div class="code-block">curl -X POST http://localhost:8090/test-download -H "Content-Type: application/json" -d '{"url": "https://youtube.com/watch?v=..."}'</div>
+                        </div>
+                        
+                        <div class="endpoint-card">
+                            <span class="endpoint-method method-post">POST</span>
+                            <strong>/extract-captions</strong>
+                            <p>Extract video captions/subtitles in available languages</p>
+                            <div class="code-block">curl -X POST http://localhost:8090/extract-captions -H "Content-Type: application/json" -d '{"url": "https://youtube.com/watch?v=..."}'</div>
                         </div>
                         
                         <div class="endpoint-card">
@@ -457,24 +523,25 @@ def home():
         let terminalHistory = [];
         let historyIndex = -1;
         
+        // Initialize global variables
+        let currentCaptionData = null;
+        
         // Load service info on page load
         window.onload = function() {
             fetch('/ytdlp-info')
-                .then(response => response.json())
-                .then(data => {
-                    document.getElementById('service-info').innerHTML = `
-                        <h4>🚀 Service Status</h4>
-                        <p><strong>yt-dlp Version:</strong> ${data['yt-dlp_version']}</p>
-                        <p><strong>Test Extraction:</strong> ${data.test_extraction}</p>
-                        <p><strong>Test Video:</strong> ${data.test_video_title}</p>
-                        <p><strong>Capabilities:</strong> ✅ Extract Info, ✅ Download, ✅ Format Detection</p>
-                    `;
+                .then(function(response) { return response.json(); })
+                .then(function(data) {
+                    document.getElementById('service-info').innerHTML = 
+                        '<h4>🚀 Service Status</h4>' +
+                        '<p><strong>yt-dlp Version:</strong> ' + data['yt-dlp_version'] + '</p>' +
+                        '<p><strong>Test Extraction:</strong> ' + data.test_extraction + '</p>' +
+                        '<p><strong>Test Video:</strong> ' + data.test_video_title + '</p>' +
+                        '<p><strong>Capabilities:</strong> ✅ Extract Info, ✅ Download, ✅ Format Detection</p>';
                 })
-                .catch(error => {
-                    document.getElementById('service-info').innerHTML = `
-                        <h4>⚠️ Service Status</h4>
-                        <p style="color: #721c24;">Failed to load service information</p>
-                    `;
+                .catch(function(error) {
+                    document.getElementById('service-info').innerHTML = 
+                        '<h4>⚠️ Service Status</h4>' +
+                        '<p style="color: #721c24;">Failed to load service information</p>';
                 });
             
             // Focus terminal input
@@ -504,19 +571,19 @@ def home():
         };
 
         function addTerminalOutput(text, type = 'output') {
-            const terminalOutput = document.getElementById('terminal-output');
-            const outputDiv = document.createElement('div');
-            outputDiv.className = `terminal-output terminal-${type}`;
+            var terminalOutput = document.getElementById('terminal-output');
+            var outputDiv = document.createElement('div');
+            outputDiv.className = 'terminal-output terminal-' + type;
             outputDiv.textContent = text;
             terminalOutput.appendChild(outputDiv);
             terminalOutput.scrollTop = terminalOutput.scrollHeight;
         }
 
         function addTerminalCommand(command) {
-            const terminalOutput = document.getElementById('terminal-output');
-            const commandDiv = document.createElement('div');
+            var terminalOutput = document.getElementById('terminal-output');
+            var commandDiv = document.createElement('div');
             commandDiv.className = 'terminal-output terminal-command';
-            commandDiv.innerHTML = `<span class="terminal-prompt">$</span> ${command}`;
+            commandDiv.innerHTML = '<span class="terminal-prompt">$</span> ' + command;
             terminalOutput.appendChild(commandDiv);
             terminalOutput.scrollTop = terminalOutput.scrollHeight;
         }
@@ -560,10 +627,10 @@ def home():
                         addTerminalOutput('Command executed successfully (no output)', 'success');
                     }
                 } else {
-                    addTerminalOutput(`Error: ${data.error}`, 'error');
+                    addTerminalOutput('Error: ' + data.error, 'error');
                 }
             } catch (error) {
-                addTerminalOutput(`Request failed: ${error.message}`, 'error');
+                addTerminalOutput('Request failed: ' + error.message, 'error');
             }
             
             // Re-enable button and focus input
@@ -590,7 +657,7 @@ def home():
                 if (progress > 95) progress = 95;
                 
                 progressFill.style.width = progress + '%';
-                progressText.textContent = `Processing... ${Math.round(progress)}%`;
+                progressText.textContent = 'Processing... ' + Math.round(progress) + '%';
             }, duration / 20);
             
             return interval;
@@ -601,9 +668,10 @@ def home():
             progressContainer.style.display = 'none';
         }
 
-        function showResult(resultId, content, isSuccess = true) {
-            const resultContainer = document.getElementById(resultId);
-            resultContainer.className = `result-container ${isSuccess ? 'result-success' : 'result-error'}`;
+        function showResult(resultId, content, isSuccess) {
+            isSuccess = isSuccess !== false; // default to true
+            var resultContainer = document.getElementById(resultId);
+            resultContainer.className = 'result-container ' + (isSuccess ? 'result-success' : 'result-error');
             resultContainer.innerHTML = content;
             resultContainer.style.display = 'block';
         }
@@ -631,28 +699,28 @@ def home():
                 hideProgress('metadata-progress');
                 
                 if (data.success) {
-                    showResult('metadata-result', `
-                        <h4>✅ Metadata Extracted Successfully</h4>
-                        <p><strong>Title:</strong> ${data.title}</p>
-                        <p><strong>Uploader:</strong> ${data.uploader}</p>
-                        <p><strong>Duration:</strong> ${Math.floor(data.duration / 60)}:${(data.duration % 60).toString().padStart(2, '0')}</p>
-                        <p><strong>View Count:</strong> ${data.view_count?.toLocaleString() || 'N/A'}</p>
-                        <p><strong>Formats Available:</strong> ${data.formats_available}</p>
-                        <p><strong>Upload Date:</strong> ${data.upload_date}</p>
-                    `, true);
+                    var metadataHtml = 
+                        '<h4>✅ Metadata Extracted Successfully</h4>' +
+                        '<p><strong>Title:</strong> ' + data.title + '</p>' +
+                        '<p><strong>Uploader:</strong> ' + data.uploader + '</p>' +
+                        '<p><strong>Duration:</strong> ' + Math.floor(data.duration / 60) + ':' + (data.duration % 60).toString().padStart(2, '0') + '</p>' +
+                        '<p><strong>View Count:</strong> ' + (data.view_count ? data.view_count.toLocaleString() : 'N/A') + '</p>' +
+                        '<p><strong>Formats Available:</strong> ' + data.formats_available + '</p>' +
+                        '<p><strong>Upload Date:</strong> ' + data.upload_date + '</p>';
+                    showResult('metadata-result', metadataHtml, true);
                 } else {
-                    showResult('metadata-result', `
-                        <h4>❌ Metadata Extraction Failed</h4>
-                        <p><strong>Error:</strong> ${data.error}</p>
-                    `, false);
+                    var errorHtml = 
+                        '<h4>❌ Metadata Extraction Failed</h4>' +
+                        '<p><strong>Error:</strong> ' + data.error + '</p>';
+                    showResult('metadata-result', errorHtml, false);
                 }
             } catch (error) {
                 clearInterval(progressInterval);
                 hideProgress('metadata-progress');
-                showResult('metadata-result', `
-                    <h4>❌ Request Failed</h4>
-                    <p><strong>Error:</strong> ${error.message}</p>
-                `, false);
+                var requestErrorHtml = 
+                    '<h4>❌ Request Failed</h4>' +
+                    '<p><strong>Error:</strong> ' + error.message + '</p>';
+                showResult('metadata-result', requestErrorHtml, false);
             }
             
             btn.disabled = false;
@@ -682,33 +750,299 @@ def home():
                 hideProgress('download-progress');
                 
                 if (data.success) {
-                    showResult('download-result', `
-                        <h4>✅ Download Completed Successfully</h4>
-                        <p><strong>Title:</strong> ${data.video_title}</p>
-                        <p><strong>Download Type:</strong> ${data.download_type}</p>
-                        <p><strong>File Size:</strong> ${data.downloaded_size_human}</p>
-                        <p><strong>File Extension:</strong> ${data.file_extension}</p>
-                        <p><strong>Duration:</strong> ${Math.floor(data.duration / 60)}:${(data.duration % 60).toString().padStart(2, '0')}</p>
-                        <p><strong>Note:</strong> ${data.note}</p>
-                        <p style="font-size: 12px; color: #666; margin-top: 10px;">${data.explanation}</p>
-                    `, true);
+                    var downloadHtml = 
+                        '<h4>✅ Download Completed Successfully</h4>' +
+                        '<p><strong>Title:</strong> ' + data.video_title + '</p>' +
+                        '<p><strong>Download Type:</strong> ' + data.download_type + '</p>' +
+                        '<p><strong>File Size:</strong> ' + data.downloaded_size_human + '</p>' +
+                        '<p><strong>File Extension:</strong> ' + data.file_extension + '</p>' +
+                        '<p><strong>Duration:</strong> ' + Math.floor(data.duration / 60) + ':' + (data.duration % 60).toString().padStart(2, '0') + '</p>' +
+                        '<p><strong>Note:</strong> ' + data.note + '</p>' +
+                        '<p style="font-size: 12px; color: #666; margin-top: 10px;">' + data.explanation + '</p>';
+                    showResult('download-result', downloadHtml, true);
                 } else {
-                    showResult('download-result', `
-                        <h4>❌ Download Failed</h4>
-                        <p><strong>Error:</strong> ${data.error}</p>
-                    `, false);
+                    var errorHtml = 
+                        '<h4>❌ Download Failed</h4>' +
+                        '<p><strong>Error:</strong> ' + data.error + '</p>';
+                    showResult('download-result', errorHtml, false);
                 }
             } catch (error) {
                 clearInterval(progressInterval);
                 hideProgress('download-progress');
-                showResult('download-result', `
-                    <h4>❌ Request Failed</h4>
-                    <p><strong>Error:</strong> ${error.message}</p>
-                `, false);
+                var requestErrorHtml = 
+                    '<h4>❌ Request Failed</h4>' +
+                    '<p><strong>Error:</strong> ' + error.message + '</p>';
+                showResult('download-result', requestErrorHtml, false);
             }
             
             btn.disabled = false;
             btn.textContent = 'Start Download';
+        }
+
+        async function testCaptions(event) {
+            event.preventDefault();
+            
+            const url = document.getElementById('captions-url').value;
+            const btn = document.getElementById('captions-btn');
+            
+            btn.disabled = true;
+            btn.textContent = 'Extracting...';
+            
+            const progressInterval = showProgress('captions-progress-fill', 'captions-progress-text', 6000);
+            
+            try {
+                const response = await fetch('/extract-captions', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ url: url })
+                });
+                
+                const data = await response.json();
+                clearInterval(progressInterval);
+                hideProgress('captions-progress');
+                
+                if (data.success) {
+                    displayCaptionResults(data);
+                } else {
+                    displayCaptionError(data);
+                }
+            } catch (error) {
+                clearInterval(progressInterval);
+                hideProgress('captions-progress');
+                var requestErrorHtml = 
+                    '<h4>❌ Request Failed</h4>' +
+                    '<p><strong>Error:</strong> ' + error.message + '</p>';
+                showResult('captions-result', requestErrorHtml, false);
+            }
+            
+            btn.disabled = false;
+            btn.textContent = 'Extract Captions';
+        }
+
+        function displayCaptionResults(data) {
+            const hasContent = data.selected_captions && data.selected_captions.trim().length > 0;
+            
+            // Store caption data globally for safe access
+            currentCaptionData = data;
+            
+            // Create video info section
+            const videoInfo = 
+                '<div style="background: #e8f5e8; padding: 15px; border-radius: 8px; margin-bottom: 15px; border-left: 4px solid #28a745;">' +
+                    '<h4 style="margin: 0 0 10px 0; color: #155724;">✅ Caption Extraction Successful</h4>' +
+                    '<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; font-size: 14px;">' +
+                        '<div><strong>Video:</strong> ' + data.video_title + '</div>' +
+                        '<div><strong>Video ID:</strong> ' + data.video_id + '</div>' +
+                        '<div><strong>Duration:</strong> ' + Math.floor(data.video_duration / 60) + ':' + (data.video_duration % 60).toString().padStart(2, '0') + '</div>' +
+                        '<div><strong>Default Language:</strong> ' + (data.default_language || 'Not specified') + '</div>' +
+                    '</div>' +
+                '</div>';
+
+            // Create language statistics
+            const languageStats = 
+                '<div style="background: #f8f9fa; padding: 15px; border-radius: 8px; margin-bottom: 15px;">' +
+                    '<h4 style="margin: 0 0 10px 0; font-size: 16px;">📊 Available Caption Languages</h4>' +
+                    '<div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 15px; text-align: center;">' +
+                        '<div style="background: white; padding: 10px; border-radius: 6px; border: 1px solid #dee2e6;">' +
+                            '<div style="font-size: 24px; font-weight: bold; color: #007bff;">' + data.manual_caption_count + '</div>' +
+                            '<div style="font-size: 12px; color: #666;">Manual Captions</div>' +
+                        '</div>' +
+                        '<div style="background: white; padding: 10px; border-radius: 6px; border: 1px solid #dee2e6;">' +
+                            '<div style="font-size: 24px; font-weight: bold; color: #6f42c1;">' + data.auto_caption_count + '</div>' +
+                            '<div style="font-size: 12px; color: #666;">Auto Captions</div>' +
+                        '</div>' +
+                        '<div style="background: white; padding: 10px; border-radius: 6px; border: 1px solid #dee2e6;">' +
+                            '<div style="font-size: 24px; font-weight: bold; color: #28a745;">' + data.available_tracks.length + '</div>' +
+                            '<div style="font-size: 12px; color: #666;">Total Available</div>' +
+                        '</div>' +
+                    '</div>' +
+                '</div>';
+
+            // Create selected track info
+            const selectedTrackInfo = 
+                '<div style="background: #fff3cd; padding: 15px; border-radius: 8px; margin-bottom: 15px; border-left: 4px solid #ffc107;">' +
+                    '<h4 style="margin: 0 0 10px 0; font-size: 16px;">🎯 Selected Caption Track</h4>' +
+                    '<div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; font-size: 14px;">' +
+                        '<div><strong>Language:</strong> ' + data.selected_track.language + '</div>' +
+                        '<div><strong>Type:</strong> ' + data.selected_track.type + '</div>' +
+                        '<div><strong>Format:</strong> ' + data.selected_track.ext + '</div>' +
+                    '</div>' +
+                '</div>';
+
+            // Create available tracks list
+            var availableTracksList = '';
+            if (data.available_tracks.length > 0) {
+                availableTracksList = '<div style="background: #f8f9fa; padding: 15px; border-radius: 8px; margin-bottom: 15px;">' +
+                    '<h4 style="margin: 0 0 10px 0; font-size: 16px;">🌐 All Available Languages</h4>' +
+                    '<div style="display: flex; flex-wrap: wrap; gap: 8px;">';
+                
+                for (var i = 0; i < data.available_tracks.length; i++) {
+                    var track = data.available_tracks[i];
+                    var bgColor = track.type === 'manual' ? '#d4edda' : '#cce7ff';
+                    var textColor = track.type === 'manual' ? '#155724' : '#004085';
+                    var borderColor = track.type === 'manual' ? '#c3e6cb' : '#b8daff';
+                    
+                    availableTracksList += '<span style="background: ' + bgColor + '; color: ' + textColor + '; padding: 4px 8px; border-radius: 12px; font-size: 12px; border: 1px solid ' + borderColor + ';">' +
+                        track.language + ' (' + track.type + ')' +
+                        '</span>';
+                }
+                
+                availableTracksList += '</div></div>';
+            }
+
+            // Create caption content section
+            var captionContent = '';
+            if (hasContent) {
+                var captionPreview = data.selected_captions.length > 1000 
+                    ? data.selected_captions.substring(0, 1000) + '... [Content truncated - download full file to see complete captions]' 
+                    : data.selected_captions;
+                
+                // Escape HTML content to prevent issues
+                captionPreview = captionPreview.replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+                
+                captionContent = 
+                    '<div style="background: #e8f5e8; padding: 15px; border-radius: 8px; margin-bottom: 15px;">' +
+                        '<h4 style="margin: 0 0 10px 0; font-size: 16px;">📝 Caption Content</h4>' +
+                        '<div style="margin-bottom: 10px;">' +
+                            '<strong>Content Length:</strong> ' + data.selected_captions.length + ' characters' +
+                        '</div>' +
+                        '<pre style="background: white; padding: 15px; border-radius: 6px; font-size: 12px; max-height: 300px; overflow-y: auto; white-space: pre-wrap; border: 1px solid #dee2e6; margin: 0;">' + captionPreview + '</pre>' +
+                        '<div style="margin-top: 10px; text-align: center;">' +
+                            '<button class="btn" onclick="downloadCaptions()" style="margin-right: 10px;">📥 Download Full Captions</button>' +
+                            '<button class="btn" onclick="copyToClipboardSafe()">📋 Copy to Clipboard</button>' +
+                        '</div>' +
+                    '</div>';
+            } else {
+                var errorNote = data.caption_fetch_error || data.note || 'Caption content could not be fetched';
+                errorNote = errorNote.replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+                
+                captionContent = 
+                    '<div style="background: #fff3cd; padding: 15px; border-radius: 8px; margin-bottom: 15px; border-left: 4px solid #ffc107;">' +
+                        '<h4 style="margin: 0 0 10px 0; font-size: 16px;">⚠️ Caption Content Not Available</h4>' +
+                        '<p style="margin: 0; font-size: 14px;">' + errorNote + '</p>' +
+                        '<p style="margin: 10px 0 0 0; font-size: 13px; color: #856404;">' +
+                            '<strong>Note:</strong> Caption metadata was successfully extracted, but the actual content could not be downloaded due to YouTube anti-bot protections. You can still see which languages are available above.' +
+                        '</p>' +
+                    '</div>';
+            }
+
+            var fullResult = videoInfo + languageStats + selectedTrackInfo + availableTracksList + captionContent;
+            showResult('captions-result', fullResult, true);
+        }
+
+        function displayCaptionError(data) {
+            var errorDetails = '<p><strong>Error:</strong> ' + (data.error || 'Unknown error').replace(/</g, '&lt;').replace(/>/g, '&gt;') + '</p>';
+            
+            if (data.manual_caption_languages && data.manual_caption_languages.length > 0) {
+                errorDetails += '<p><strong>Available Manual Languages:</strong> ' + data.manual_caption_languages.join(', ') + '</p>';
+            }
+            if (data.auto_caption_languages && data.auto_caption_languages.length > 0) {
+                errorDetails += '<p><strong>Available Auto Languages:</strong> ' + data.auto_caption_languages.join(', ') + '</p>';
+            }
+            
+            var errorHtml = 
+                '<div style="background: #f8d7da; padding: 15px; border-radius: 8px; border-left: 4px solid #dc3545;">' +
+                    '<h4 style="margin: 0 0 10px 0; color: #721c24;">❌ Caption Extraction Failed</h4>' +
+                    errorDetails +
+                '</div>';
+            
+            showResult('captions-result', errorHtml, false);
+        }
+
+        function loadTestVideo(url, title) {
+            document.getElementById('captions-url').value = url;
+            // Optionally show a brief notification
+            const btn = document.getElementById('captions-btn');
+            var originalText = btn.textContent;
+            btn.textContent = 'Loaded: ' + title;
+            btn.style.background = '#28a745';
+            setTimeout(function() {
+                btn.textContent = originalText;
+                btn.style.background = '';
+            }, 2000);
+        }
+
+        function copyToClipboardSafe() {
+            if (!currentCaptionData || !currentCaptionData.selected_captions) {
+                alert('No caption content available to copy');
+                return;
+            }
+            
+            var text = currentCaptionData.selected_captions;
+            navigator.clipboard.writeText(text).then(function() {
+                // Show temporary success message
+                var notification = document.createElement('div');
+                notification.style.cssText = 
+                    'position: fixed; top: 20px; right: 20px; background: #28a745; color: white; ' +
+                    'padding: 10px 20px; border-radius: 6px; z-index: 1000; font-size: 14px;';
+                notification.textContent = '✅ Captions copied to clipboard!';
+                document.body.appendChild(notification);
+                setTimeout(function() { document.body.removeChild(notification); }, 3000);
+            }).catch(function(err) {
+                // Fallback for older browsers
+                var textArea = document.createElement('textarea');
+                textArea.value = text;
+                document.body.appendChild(textArea);
+                textArea.select();
+                try {
+                    document.execCommand('copy');
+                    var notification = document.createElement('div');
+                    notification.style.cssText = 
+                        'position: fixed; top: 20px; right: 20px; background: #28a745; color: white; ' +
+                        'padding: 10px 20px; border-radius: 6px; z-index: 1000; font-size: 14px;';
+                    notification.textContent = '✅ Captions copied to clipboard!';
+                    document.body.appendChild(notification);
+                    setTimeout(function() { document.body.removeChild(notification); }, 3000);
+                } catch (fallbackErr) {
+                    alert('Failed to copy to clipboard: ' + fallbackErr);
+                }
+                document.body.removeChild(textArea);
+            });
+        }
+
+        function copyToClipboard(text) {
+            navigator.clipboard.writeText(text).then(function() {
+                // Show temporary success message
+                var notification = document.createElement('div');
+                notification.style.cssText = 
+                    'position: fixed; top: 20px; right: 20px; background: #28a745; color: white; ' +
+                    'padding: 10px 20px; border-radius: 6px; z-index: 1000; font-size: 14px;';
+                notification.textContent = '✅ Captions copied to clipboard!';
+                document.body.appendChild(notification);
+                setTimeout(function() { document.body.removeChild(notification); }, 3000);
+            }).catch(function(err) {
+                alert('Failed to copy to clipboard: ' + err);
+            });
+        }
+
+        function downloadCaptions() {
+            if (!currentCaptionData || !currentCaptionData.selected_captions) {
+                alert('No caption content available to download');
+                return;
+            }
+            
+            try {
+                // Create downloadable file using current data
+                var blob = new Blob([currentCaptionData.selected_captions], { type: 'text/plain' });
+                var downloadUrl = window.URL.createObjectURL(blob);
+                var a = document.createElement('a');
+                a.href = downloadUrl;
+                a.download = currentCaptionData.video_id + '_' + currentCaptionData.selected_track.language + '.' + currentCaptionData.selected_track.ext;
+                document.body.appendChild(a);
+                a.click();
+                window.URL.revokeObjectURL(downloadUrl);
+                document.body.removeChild(a);
+                
+                // Show success notification
+                var notification = document.createElement('div');
+                notification.style.cssText = 
+                    'position: fixed; top: 20px; right: 20px; background: #007bff; color: white; ' +
+                    'padding: 10px 20px; border-radius: 6px; z-index: 1000; font-size: 14px;';
+                notification.textContent = '✅ Caption file downloaded!';
+                document.body.appendChild(notification);
+                setTimeout(function() { document.body.removeChild(notification); }, 3000);
+            } catch (error) {
+                alert('Failed to download captions: ' + error.message);
+            }
         }
     </script>
 </body>
@@ -921,6 +1255,208 @@ def test_download():
             'timestamp': datetime.now().isoformat()
         }), 500
 
+@app.route('/extract-captions', methods=['POST'])
+def extract_captions():
+    """Extract YouTube video captions/subtitles"""
+    try:
+        data = request.get_json()
+        url = data.get('url')
+        
+        if not url:
+            return jsonify({'error': 'URL is required', 'success': False}), 400
+        
+        # Configure yt-dlp for full JSON metadata extraction
+        ydl_opts = {
+            'quiet': True,
+            'no_warnings': True,
+            'extract_flat': False,
+            'writesubtitles': False,  # Don't download subtitle files
+            'writeautomaticsub': False,  # Don't download auto-generated subtitle files
+        }
+        
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            # Extract full video information including subtitle metadata
+            info = ydl.extract_info(url, download=False)
+            
+            if not info:
+                return jsonify({
+                    'success': False,
+                    'error': 'Failed to extract video information',
+                    'timestamp': datetime.now().isoformat()
+                }), 500
+            
+            video_id = info.get('id', 'unknown')
+            default_language = info.get('language') or info.get('language_code')
+            
+            print(f"Default language for video {video_id}: {default_language}")
+            
+            # Get caption data
+            manual_captions = info.get('subtitles', {})
+            auto_captions = info.get('automatic_captions', {})
+            
+            # Filter for VTT captions in manual captions first
+            vtt_tracks = []
+            for lang, tracks in manual_captions.items():
+                for track in tracks:
+                    if track.get('ext') == 'vtt':
+                        vtt_tracks.append({
+                            'language': lang,
+                            'type': 'manual',
+                            'url': track['url'],
+                            'ext': track['ext']
+                        })
+            
+            # If no VTT in manual captions, look in auto captions for TTML
+            if not vtt_tracks:
+                for lang, tracks in auto_captions.items():
+                    for track in tracks:
+                        if track.get('ext') == 'ttml':
+                            vtt_tracks.append({
+                                'language': lang,
+                                'type': 'auto',
+                                'url': track['url'],
+                                'ext': track['ext']
+                            })
+            
+            # If still no captions found, try any format from auto captions
+            if not vtt_tracks:
+                for lang, tracks in auto_captions.items():
+                    for track in tracks:
+                        vtt_tracks.append({
+                            'language': lang,
+                            'type': 'auto',
+                            'url': track['url'],
+                            'ext': track.get('ext', 'unknown')
+                        })
+                        break  # Take first available format per language
+                    if len(vtt_tracks) >= 5:  # Limit to first 5 languages
+                        break
+            
+            if not vtt_tracks:
+                return jsonify({
+                    'success': False,
+                    'error': 'No captions available for this video',
+                    'video_id': video_id,
+                    'video_title': info.get('title', 'Unknown'),
+                    'manual_caption_languages': list(manual_captions.keys()),
+                    'auto_caption_languages': list(auto_captions.keys()),
+                    'timestamp': datetime.now().isoformat()
+                }), 404
+            
+            # Determine best language fallback
+            if not default_language:
+                # Look for English variant
+                english_track = next((track for track in vtt_tracks if track['language'].startswith('en')), None)
+                if english_track:
+                    default_language = english_track['language']
+            
+            # Select the best caption track
+            selected_track = None
+            if default_language:
+                selected_track = next((track for track in vtt_tracks if track['language'] == default_language), None)
+            
+            # Fallback to English if default language not found
+            if not selected_track:
+                selected_track = next((track for track in vtt_tracks if track['language'].startswith('en')), None)
+            
+            # Final fallback to first available
+            if not selected_track:
+                selected_track = vtt_tracks[0]
+            
+            print(f"Selected caption track for {video_id}: {selected_track}")
+            
+            # Try to get caption content (YouTube has protections, so this may not always work)
+            caption_content = ""
+            caption_fetch_error = None
+            
+            # Approach 1: Try direct URL fetch with headers
+            try:
+                headers = {
+                    'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                    'Accept': 'text/vtt,text/plain,*/*',
+                    'Accept-Language': 'en-US,en;q=0.9',
+                    'Referer': 'https://www.youtube.com/'
+                }
+                
+                print(f"Attempting direct fetch of captions from URL...")
+                caption_response = requests.get(selected_track['url'], headers=headers, timeout=15)
+                if caption_response.status_code == 200 and caption_response.text.strip():
+                    caption_content = caption_response.text
+                    print(f"Successfully fetched {len(caption_content)} characters via direct URL")
+                else:
+                    print(f"Direct URL fetch failed: {caption_response.status_code}")
+                    
+            except Exception as e:
+                print(f"Direct URL fetch error: {str(e)}")
+                caption_fetch_error = f"Direct fetch failed: {str(e)}"
+            
+            # Approach 2: If direct fetch failed, try yt-dlp download (usually fails due to YouTube protections)
+            if not caption_content:
+                try:
+                    temp_dir = tempfile.mkdtemp()
+                    caption_file_template = os.path.join(temp_dir, f"{video_id}.%(ext)s")
+                    
+                    caption_opts = {
+                        'outtmpl': caption_file_template,
+                        'writesubtitles': True,
+                        'writeautomaticsub': False,  # Only manual captions
+                        'subtitleslangs': [selected_track['language']],
+                        'subtitlesformat': 'vtt/best',
+                        'skip_download': True,
+                        'quiet': True,
+                        'no_warnings': True
+                    }
+                    
+                    print(f"Attempting yt-dlp caption download...")
+                    with yt_dlp.YoutubeDL(caption_opts) as ydl:
+                        ydl.download([url])
+                    
+                    # Look for downloaded caption files
+                    for filename in os.listdir(temp_dir):
+                        if filename.endswith(('.vtt', '.ttml', '.srv3')):
+                            caption_file_path = os.path.join(temp_dir, filename)
+                            with open(caption_file_path, 'r', encoding='utf-8') as f:
+                                caption_content = f.read()
+                            print(f"Found yt-dlp caption file: {caption_file_path} ({len(caption_content)} chars)")
+                            break
+                    
+                    shutil.rmtree(temp_dir)
+                    
+                except Exception as e:
+                    print(f"yt-dlp caption download error: {str(e)}")
+                    if 'temp_dir' in locals() and os.path.exists(temp_dir):
+                        shutil.rmtree(temp_dir)
+                    caption_fetch_error = f"yt-dlp download failed: {str(e)}"
+                
+            # Return result regardless of whether caption content was fetched
+            result = {
+                'success': True,
+                'video_id': video_id,
+                'video_title': info.get('title', 'Unknown'),
+                'video_duration': info.get('duration', 0),
+                'default_language': default_language,
+                'selected_track': selected_track,
+                'selected_captions': caption_content,
+                'available_tracks': vtt_tracks,
+                'manual_caption_count': len(manual_captions),
+                'auto_caption_count': len(auto_captions),
+                'timestamp': datetime.now().isoformat()
+            }
+            
+            # Add error info if caption fetching failed
+            if not caption_content and caption_fetch_error:
+                result['caption_fetch_error'] = caption_fetch_error
+                result['note'] = 'Caption metadata extracted successfully, but content could not be fetched due to YouTube protections'
+            
+            return jsonify(result)
+            
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e),
+            'timestamp': datetime.now().isoformat()
+        }), 500
+
 @app.route('/terminal', methods=['POST'])
 def terminal():
     try:
@@ -1031,6 +1567,30 @@ def api_docs():
                     'downloaded_size_mb': 230.48,
                     'download_type': 'video',
                     'file_extension': '.webm'
+                }
+            },
+            'POST /extract-captions': {
+                'description': 'Extract and return YouTube video captions/subtitles',
+                'request_body': {'url': 'YouTube URL'},
+                'response_type': 'JSON',
+                'example_request': {
+                    'url': 'https://www.youtube.com/watch?v=dQw4w9WgXcQ'
+                },
+                'example_response': {
+                    'success': True,
+                    'video_id': 'dQw4w9WgXcQ',
+                    'video_title': 'Rick Astley - Never Gonna Give You Up',
+                    'default_language': 'en',
+                    'selected_track': {
+                        'language': 'en',
+                        'type': 'auto',
+                        'url': 'https://...',
+                        'ext': 'ttml'
+                    },
+                    'selected_captions': 'WEBVTT\\n\\n00:00:00.000 --> 00:00:03.000\\nNever gonna give you up...',
+                    'available_tracks': [],
+                    'manual_caption_count': 0,
+                    'auto_caption_count': 12
                 }
             },
             'POST /terminal': {
