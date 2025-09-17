@@ -820,7 +820,7 @@ def home():
         }
 
         function displayCaptionResults(data) {
-            const hasContent = data.selected_captions && data.selected_captions.trim().length > 0;
+            const hasContent = data.selectedCaptions && data.selectedCaptions.trim().length > 0;
             
             // Store caption data globally for safe access
             currentCaptionData = data;
@@ -830,10 +830,10 @@ def home():
                 '<div style="background: #e8f5e8; padding: 15px; border-radius: 8px; margin-bottom: 15px; border-left: 4px solid #28a745;">' +
                     '<h4 style="margin: 0 0 10px 0; color: #155724;">✅ Caption Extraction Successful</h4>' +
                     '<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; font-size: 14px;">' +
-                        '<div><strong>Video:</strong> ' + data.video_title + '</div>' +
-                        '<div><strong>Video ID:</strong> ' + data.video_id + '</div>' +
-                        '<div><strong>Duration:</strong> ' + Math.floor(data.video_duration / 60) + ':' + (data.video_duration % 60).toString().padStart(2, '0') + '</div>' +
-                        '<div><strong>Default Language:</strong> ' + (data.default_language || 'Not specified') + '</div>' +
+                        '<div><strong>Video:</strong> ' + data.videoTitle + '</div>' +
+                        '<div><strong>Video ID:</strong> ' + data.videoId + '</div>' +
+                        '<div><strong>Duration:</strong> ' + Math.floor(data.videoDuration / 60) + ':' + (data.videoDuration % 60).toString().padStart(2, '0') + '</div>' +
+                        '<div><strong>Default Language:</strong> ' + (data.defaultLanguage || 'Not specified') + '</div>' +
                     '</div>' +
                 '</div>';
 
@@ -843,15 +843,15 @@ def home():
                     '<h4 style="margin: 0 0 10px 0; font-size: 16px;">📊 Available Caption Languages</h4>' +
                     '<div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 15px; text-align: center;">' +
                         '<div style="background: white; padding: 10px; border-radius: 6px; border: 1px solid #dee2e6;">' +
-                            '<div style="font-size: 24px; font-weight: bold; color: #007bff;">' + data.manual_caption_count + '</div>' +
+                            '<div style="font-size: 24px; font-weight: bold; color: #007bff;">' + data.manualCaptionCount + '</div>' +
                             '<div style="font-size: 12px; color: #666;">Manual Captions</div>' +
                         '</div>' +
                         '<div style="background: white; padding: 10px; border-radius: 6px; border: 1px solid #dee2e6;">' +
-                            '<div style="font-size: 24px; font-weight: bold; color: #6f42c1;">' + data.auto_caption_count + '</div>' +
+                            '<div style="font-size: 24px; font-weight: bold; color: #6f42c1;">' + data.autoCaptionCount + '</div>' +
                             '<div style="font-size: 12px; color: #666;">Auto Captions</div>' +
                         '</div>' +
                         '<div style="background: white; padding: 10px; border-radius: 6px; border: 1px solid #dee2e6;">' +
-                            '<div style="font-size: 24px; font-weight: bold; color: #28a745;">' + data.available_tracks.length + '</div>' +
+                            '<div style="font-size: 24px; font-weight: bold; color: #28a745;">' + data.availableTracks.length + '</div>' +
                             '<div style="font-size: 12px; color: #666;">Total Available</div>' +
                         '</div>' +
                     '</div>' +
@@ -862,21 +862,21 @@ def home():
                 '<div style="background: #fff3cd; padding: 15px; border-radius: 8px; margin-bottom: 15px; border-left: 4px solid #ffc107;">' +
                     '<h4 style="margin: 0 0 10px 0; font-size: 16px;">🎯 Selected Caption Track</h4>' +
                     '<div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; font-size: 14px;">' +
-                        '<div><strong>Language:</strong> ' + data.selected_track.language + '</div>' +
-                        '<div><strong>Type:</strong> ' + data.selected_track.type + '</div>' +
-                        '<div><strong>Format:</strong> ' + data.selected_track.ext + '</div>' +
+                        '<div><strong>Language:</strong> ' + data.selectedTrack.language + '</div>' +
+                        '<div><strong>Type:</strong> ' + data.selectedTrack.type + '</div>' +
+                        '<div><strong>Format:</strong> ' + data.selectedTrack.ext + '</div>' +
                     '</div>' +
                 '</div>';
 
             // Create available tracks list
             var availableTracksList = '';
-            if (data.available_tracks.length > 0) {
+            if (data.availableTracks.length > 0) {
                 availableTracksList = '<div style="background: #f8f9fa; padding: 15px; border-radius: 8px; margin-bottom: 15px;">' +
                     '<h4 style="margin: 0 0 10px 0; font-size: 16px;">🌐 All Available Languages</h4>' +
                     '<div style="display: flex; flex-wrap: wrap; gap: 8px;">';
                 
-                for (var i = 0; i < data.available_tracks.length; i++) {
-                    var track = data.available_tracks[i];
+                for (var i = 0; i < data.availableTracks.length; i++) {
+                    var track = data.availableTracks[i];
                     var bgColor = track.type === 'manual' ? '#d4edda' : '#cce7ff';
                     var textColor = track.type === 'manual' ? '#155724' : '#004085';
                     var borderColor = track.type === 'manual' ? '#c3e6cb' : '#b8daff';
@@ -892,9 +892,9 @@ def home():
             // Create caption content section
             var captionContent = '';
             if (hasContent) {
-                var captionPreview = data.selected_captions.length > 1000 
-                    ? data.selected_captions.substring(0, 1000) + '... [Content truncated - download full file to see complete captions]' 
-                    : data.selected_captions;
+                var captionPreview = data.selectedCaptions.length > 1000 
+                    ? data.selectedCaptions.substring(0, 1000) + '... [Content truncated - download full file to see complete captions]' 
+                    : data.selectedCaptions;
                 
                 // Escape HTML content to prevent issues
                 captionPreview = captionPreview.replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -903,7 +903,7 @@ def home():
                     '<div style="background: #e8f5e8; padding: 15px; border-radius: 8px; margin-bottom: 15px;">' +
                         '<h4 style="margin: 0 0 10px 0; font-size: 16px;">📝 Caption Content</h4>' +
                         '<div style="margin-bottom: 10px;">' +
-                            '<strong>Content Length:</strong> ' + data.selected_captions.length + ' characters' +
+                            '<strong>Content Length:</strong> ' + data.selectedCaptions.length + ' characters' +
                         '</div>' +
                         '<pre style="background: white; padding: 15px; border-radius: 6px; font-size: 12px; max-height: 300px; overflow-y: auto; white-space: pre-wrap; border: 1px solid #dee2e6; margin: 0;">' + captionPreview + '</pre>' +
                         '<div style="margin-top: 10px; text-align: center;">' +
@@ -912,7 +912,7 @@ def home():
                         '</div>' +
                     '</div>';
             } else {
-                var errorNote = data.caption_fetch_error || data.note || 'Caption content could not be fetched';
+                var errorNote = data.captionFetchError || data.note || 'Caption content could not be fetched';
                 errorNote = errorNote.replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
                 
                 captionContent = 
@@ -932,11 +932,11 @@ def home():
         function displayCaptionError(data) {
             var errorDetails = '<p><strong>Error:</strong> ' + (data.error || 'Unknown error').replace(/</g, '&lt;').replace(/>/g, '&gt;') + '</p>';
             
-            if (data.manual_caption_languages && data.manual_caption_languages.length > 0) {
-                errorDetails += '<p><strong>Available Manual Languages:</strong> ' + data.manual_caption_languages.join(', ') + '</p>';
+            if (data.manualCaptionLanguages && data.manualCaptionLanguages.length > 0) {
+                errorDetails += '<p><strong>Available Manual Languages:</strong> ' + data.manualCaptionLanguages.join(', ') + '</p>';
             }
-            if (data.auto_caption_languages && data.auto_caption_languages.length > 0) {
-                errorDetails += '<p><strong>Available Auto Languages:</strong> ' + data.auto_caption_languages.join(', ') + '</p>';
+            if (data.autoCaptionLanguages && data.autoCaptionLanguages.length > 0) {
+                errorDetails += '<p><strong>Available Auto Languages:</strong> ' + data.autoCaptionLanguages.join(', ') + '</p>';
             }
             
             var errorHtml = 
@@ -962,12 +962,12 @@ def home():
         }
 
         function copyToClipboardSafe() {
-            if (!currentCaptionData || !currentCaptionData.selected_captions) {
+            if (!currentCaptionData || !currentCaptionData.selectedCaptions) {
                 alert('No caption content available to copy');
                 return;
             }
             
-            var text = currentCaptionData.selected_captions;
+            var text = currentCaptionData.selectedCaptions;
             navigator.clipboard.writeText(text).then(function() {
                 // Show temporary success message
                 var notification = document.createElement('div');
@@ -1015,18 +1015,18 @@ def home():
         }
 
         function downloadCaptions() {
-            if (!currentCaptionData || !currentCaptionData.selected_captions) {
+            if (!currentCaptionData || !currentCaptionData.selectedCaptions) {
                 alert('No caption content available to download');
                 return;
             }
             
             try {
                 // Create downloadable file using current data
-                var blob = new Blob([currentCaptionData.selected_captions], { type: 'text/plain' });
+                var blob = new Blob([currentCaptionData.selectedCaptions], { type: 'text/plain' });
                 var downloadUrl = window.URL.createObjectURL(blob);
                 var a = document.createElement('a');
                 a.href = downloadUrl;
-                a.download = currentCaptionData.video_id + '_' + currentCaptionData.selected_track.language + '.' + currentCaptionData.selected_track.ext;
+                a.download = currentCaptionData.videoId + '_' + currentCaptionData.selectedTrack.language + '.' + currentCaptionData.selectedTrack.ext;
                 document.body.appendChild(a);
                 a.click();
                 window.URL.revokeObjectURL(downloadUrl);
@@ -1336,10 +1336,10 @@ def extract_captions():
                 return jsonify({
                     'success': False,
                     'error': 'No captions available for this video',
-                    'video_id': video_id,
-                    'video_title': info.get('title', 'Unknown'),
-                    'manual_caption_languages': list(manual_captions.keys()),
-                    'auto_caption_languages': list(auto_captions.keys()),
+                    'videoId': video_id,
+                    'videoTitle': info.get('title', 'Unknown'),
+                    'manualCaptionLanguages': list(manual_captions.keys()),
+                    'autoCaptionLanguages': list(auto_captions.keys()),
                     'timestamp': datetime.now().isoformat()
                 }), 404
             
@@ -1431,21 +1431,21 @@ def extract_captions():
             # Return result regardless of whether caption content was fetched
             result = {
                 'success': True,
-                'video_id': video_id,
-                'video_title': info.get('title', 'Unknown'),
-                'video_duration': info.get('duration', 0),
-                'default_language': default_language,
-                'selected_track': selected_track,
-                'selected_captions': caption_content,
-                'available_tracks': vtt_tracks,
-                'manual_caption_count': len(manual_captions),
-                'auto_caption_count': len(auto_captions),
+                'videoId': video_id,
+                'videoTitle': info.get('title', 'Unknown'),
+                'videoDuration': info.get('duration', 0),
+                'defaultLanguage': default_language,
+                'selectedTrack': selected_track,
+                'selectedCaptions': caption_content,
+                'availableTracks': vtt_tracks,
+                'manualCaptionCount': len(manual_captions),
+                'autoCaptionCount': len(auto_captions),
                 'timestamp': datetime.now().isoformat()
             }
             
             # Add error info if caption fetching failed
             if not caption_content and caption_fetch_error:
-                result['caption_fetch_error'] = caption_fetch_error
+                result['captionFetchError'] = caption_fetch_error
                 result['note'] = 'Caption metadata extracted successfully, but content could not be fetched due to YouTube protections'
             
             return jsonify(result)
@@ -1578,19 +1578,19 @@ def api_docs():
                 },
                 'example_response': {
                     'success': True,
-                    'video_id': 'dQw4w9WgXcQ',
-                    'video_title': 'Rick Astley - Never Gonna Give You Up',
-                    'default_language': 'en',
-                    'selected_track': {
+                    'videoId': 'dQw4w9WgXcQ',
+                    'videoTitle': 'Rick Astley - Never Gonna Give You Up',
+                    'defaultLanguage': 'en',
+                    'selectedTrack': {
                         'language': 'en',
                         'type': 'auto',
                         'url': 'https://...',
                         'ext': 'ttml'
                     },
-                    'selected_captions': 'WEBVTT\\n\\n00:00:00.000 --> 00:00:03.000\\nNever gonna give you up...',
-                    'available_tracks': [],
-                    'manual_caption_count': 0,
-                    'auto_caption_count': 12
+                    'selectedCaptions': 'WEBVTT\\n\\n00:00:00.000 --> 00:00:03.000\\nNever gonna give you up...',
+                    'availableTracks': [],
+                    'manualCaptionCount': 0,
+                    'autoCaptionCount': 12
                 }
             },
             'POST /terminal': {
