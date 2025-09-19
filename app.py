@@ -10,6 +10,7 @@ import shutil
 from functools import lru_cache
 import concurrent.futures
 import time
+import random
 
 app = Flask(__name__)
 
@@ -1285,11 +1286,12 @@ def extract_captions():
     try:
         data = request.get_json()
         url = data.get('url')
+        preferred_language = data.get('language', 'en')  # Default to English
         
         if not url:
             return jsonify({'error': 'URL is required', 'success': False}), 400
         
-        print(f"Starting caption extraction for: {url}")
+        print(f"Starting caption extraction for: {url} (preferred language: {preferred_language})")
         
         # Use cached metadata extraction
         metadata_start = time.time()
@@ -1314,14 +1316,14 @@ def extract_captions():
         auto_captions = info.get('automatic_captions', {})
         
         # Optimize caption track processing - limit to top 3 languages for speed
-        vtt_tracks = []
+        available_tracks = []
         processed_count = 0
         for lang, tracks in manual_captions.items():
             if processed_count >= 3:  # Reduced from 5 to 3 for speed
                 break
             for track in tracks:
-                if track.get('ext') == 'vtt':
-                    vtt_tracks.append({
+                if track.get('ext') in ['vtt', 'ttml']:  # Accept both VTT and TTML for manual captions
+                    available_tracks.append({
                         'language': lang,
                         'type': 'manual',
                         'url': track['url'],
@@ -1330,22 +1332,40 @@ def extract_captions():
                     processed_count += 1
                     break
         
-        # Add auto captions if not enough manual ones
-        if len(vtt_tracks) < 3:
-            for lang, tracks in auto_captions.items():
-                if len(vtt_tracks) >= 3:
+        # Add auto captions - prioritize English first
+        if len(available_tracks) < 5:  # Increased limit to include more options
+            # First, add English auto captions if available
+            english_langs = [lang for lang in auto_captions.keys() if lang.startswith('en')]
+            for lang in english_langs:
+                if len(available_tracks) >= 5:
                     break
+                tracks = auto_captions[lang]
                 for track in tracks:
                     if track.get('ext') in ['ttml', 'vtt']:
-                        vtt_tracks.append({
+                        available_tracks.append({
                             'language': lang,
                             'type': 'auto',
                             'url': track['url'],
                             'ext': track['ext']
                         })
                         break
+            
+            # Then add other languages if we still need more
+            for lang, tracks in auto_captions.items():
+                if len(available_tracks) >= 5:
+                    break
+                if not lang.startswith('en'):  # Skip English as we already added them
+                    for track in tracks:
+                        if track.get('ext') in ['ttml', 'vtt']:
+                            available_tracks.append({
+                                'language': lang,
+                                'type': 'auto',
+                                'url': track['url'],
+                                'ext': track['ext']
+                            })
+                            break
 
-        if not vtt_tracks:
+        if not available_tracks:
             return jsonify({
                 'success': False,
                 'error': 'No captions available for this video',
@@ -1359,22 +1379,42 @@ def extract_captions():
         # Determine best language fallback
         if not default_language:
             # Look for English variant
-            english_track = next((track for track in vtt_tracks if track['language'].startswith('en')), None)
+            english_track = next((track for track in available_tracks if track['language'].startswith('en')), None)
             if english_track:
                 default_language = english_track['language']
         
-        # Select the best caption track
+        # Select the best caption track based on preferred language
         selected_track = None
-        if default_language:
-            selected_track = next((track for track in vtt_tracks if track['language'] == default_language), None)
         
-        # Fallback to English if default language not found
-        if not selected_track:
-            selected_track = next((track for track in vtt_tracks if track['language'].startswith('en')), None)
+        # First priority: Preferred language auto-generated captions
+        preferred_auto_track = next((track for track in available_tracks 
+                                   if track['language'].startswith(preferred_language) and track['type'] == 'auto'), None)
+        
+        # Second priority: Preferred language manual captions
+        preferred_manual_track = next((track for track in available_tracks 
+                                     if track['language'].startswith(preferred_language) and track['type'] == 'manual'), None)
+        
+        # Third priority: English auto-generated (if preferred language is not English)
+        english_auto_track = None
+        english_manual_track = None
+        if preferred_language != 'en':
+            english_auto_track = next((track for track in available_tracks 
+                                     if track['language'].startswith('en') and track['type'] == 'auto'), None)
+            english_manual_track = next((track for track in available_tracks 
+                                       if track['language'].startswith('en') and track['type'] == 'manual'), None)
+        
+        # Fourth priority: Default language (if different from preferred and English)
+        default_track = None
+        if default_language and not default_language.startswith(preferred_language) and not default_language.startswith('en'):
+            default_track = next((track for track in available_tracks if track['language'] == default_language), None)
+        
+        # Selection priority
+        selected_track = (preferred_auto_track or preferred_manual_track or 
+                         english_auto_track or english_manual_track or default_track)
         
         # Final fallback to first available
         if not selected_track:
-            selected_track = vtt_tracks[0]
+            selected_track = available_tracks[0]
         
         print(f"Selected caption track for {video_id}: {selected_track}")
         
@@ -1384,15 +1424,39 @@ def extract_captions():
         
         fetch_start = time.time()
         try:
+            # Enhanced headers to mimic real browser behavior
             headers = {
                 'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                'Accept': 'text/vtt,text/plain,*/*',
-                'Accept-Language': 'en-US,en;q=0.9',
-                'Referer': 'https://www.youtube.com/'
+                'Accept': 'text/vtt,application/ttml+xml,text/plain,*/*',
+                'Accept-Language': 'en-US,en;q=0.9,es;q=0.8',
+                'Accept-Encoding': 'gzip, deflate, br',
+                'Cache-Control': 'no-cache',
+                'Connection': 'keep-alive',
+                'DNT': '1',
+                'Pragma': 'no-cache',
+                'Referer': f'https://www.youtube.com/watch?v={video_id}',
+                'Sec-Ch-Ua': '"Not_A Brand";v="8", "Chromium";v="120", "Google Chrome";v="120"',
+                'Sec-Ch-Ua-Mobile': '?0',
+                'Sec-Ch-Ua-Platform': '"macOS"',
+                'Sec-Fetch-Dest': 'empty',
+                'Sec-Fetch-Mode': 'cors',
+                'Sec-Fetch-Site': 'same-origin',
+                'X-Client-Data': 'CIe2yQEIorbJAQipncoBCMDdygEIlaHLAQiHoM0BCLnIzQEY9snNAQ==',
+                'X-Youtube-Client-Name': '1',
+                'X-Youtube-Client-Version': '2.20231214.01.00'
             }
             
-            print(f"Attempting direct fetch of captions from URL...")
-            caption_response = requests.get(selected_track['url'], headers=headers, timeout=8)  # Reduced from 15s
+            print(f"Attempting direct fetch of captions from URL with enhanced headers...")
+            
+            # Create a session to maintain cookies and connection
+            session = requests.Session()
+            session.headers.update(headers)
+            
+            # Add a small delay to avoid rate limiting
+            import random
+            time.sleep(random.uniform(0.5, 1.5))
+            
+            caption_response = session.get(selected_track['url'], timeout=10)
             if caption_response.status_code == 200 and caption_response.text.strip():
                 caption_content = caption_response.text
                 fetch_time = time.time() - fetch_start
@@ -1404,7 +1468,73 @@ def extract_captions():
             print(f"Direct URL fetch error: {str(e)}")
             caption_fetch_error = f"Direct fetch failed: {str(e)}"
         
-        # Skip yt-dlp fallback for speed - it usually fails anyway due to YouTube protections
+        # Fallback to yt-dlp with enhanced configuration if direct fetch failed
+        if not caption_content:
+            print("Attempting yt-dlp fallback with enhanced browser impersonation...")
+            try:
+                fallback_start = time.time()
+                
+                # Enhanced yt-dlp options for better YouTube compatibility
+                # Try preferred language first, then selected track language
+                subtitle_langs = [preferred_language, selected_track['language']]
+                # Remove duplicates while preserving order
+                subtitle_langs = list(dict.fromkeys(subtitle_langs))
+                
+                ydl_opts = {
+                    'writesubtitles': True,
+                    'writeautomaticsub': True,
+                    'subtitleslangs': subtitle_langs,
+                    'subtitlesformat': 'ttml/vtt/best',
+                    'skip_download': True,
+                    'quiet': True,
+                    'no_warnings': True,
+                    'extract_flat': False,
+                    # Enhanced browser impersonation
+                    'http_headers': {
+                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+                        'Accept-Language': 'en-us,en;q=0.5',
+                        'Sec-Fetch-Mode': 'navigate',
+                    },
+                    # Add cookies and session handling
+                    'cookiefile': None,
+                    'extractor_retries': 3,
+                    'fragment_retries': 3,
+                    'retry_sleep_functions': {'http': lambda n: min(4 ** n, 60)},
+                }
+                
+                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                    # Try to extract subtitle info
+                    info_dict = ydl.extract_info(url, download=False)
+                    
+                    # Look for the subtitle content in the extracted info
+                    if 'requested_subtitles' in info_dict and info_dict['requested_subtitles']:
+                        for lang, sub_info in info_dict['requested_subtitles'].items():
+                            if sub_info and 'data' in sub_info:
+                                caption_content = sub_info['data']
+                                fallback_time = time.time() - fallback_start
+                                print(f"Successfully extracted {len(caption_content)} characters via yt-dlp fallback in {fallback_time:.2f}s")
+                                break
+                            elif sub_info and 'url' in sub_info:
+                                # Try to fetch from the URL provided by yt-dlp
+                                try:
+                                    session = requests.Session()
+                                    session.headers.update(headers)
+                                    resp = session.get(sub_info['url'], timeout=10)
+                                    if resp.status_code == 200:
+                                        caption_content = resp.text
+                                        fallback_time = time.time() - fallback_start
+                                        print(f"Successfully fetched {len(caption_content)} characters via yt-dlp URL in {fallback_time:.2f}s")
+                                        break
+                                except Exception as url_e:
+                                    print(f"yt-dlp URL fetch failed: {url_e}")
+                    else:
+                        print("No subtitles available via yt-dlp fallback")
+                        
+            except Exception as fallback_e:
+                print(f"yt-dlp fallback failed: {str(fallback_e)}")
+                if not caption_fetch_error:
+                    caption_fetch_error = f"yt-dlp fallback failed: {str(fallback_e)}"
         
         total_time = time.time() - start_time
         print(f"Total caption extraction time: {total_time:.2f}s")
@@ -1418,7 +1548,7 @@ def extract_captions():
             'defaultLanguage': default_language,
             'selectedTrack': selected_track,
             'selectedCaptions': caption_content,
-            'availableTracks': vtt_tracks,
+            'availableTracks': available_tracks,
             'manualCaptionCount': len(manual_captions),
             'autoCaptionCount': len(auto_captions),
             'processingTime': f"{total_time:.2f}s",
@@ -1555,11 +1685,15 @@ def api_docs():
                 }
             },
             'POST /extract-captions': {
-                'description': 'Extract and return YouTube video captions/subtitles',
-                'request_body': {'url': 'YouTube URL'},
+                'description': 'Extract and return YouTube video captions/subtitles with language preference',
+                'request_body': {
+                    'url': 'YouTube URL (required)',
+                    'language': 'Preferred language code (optional, defaults to "en" for English)'
+                },
                 'response_type': 'JSON',
                 'example_request': {
-                    'url': 'https://www.youtube.com/watch?v=dQw4w9WgXcQ'
+                    'url': 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+                    'language': 'en'
                 },
                 'example_response': {
                     'success': True,

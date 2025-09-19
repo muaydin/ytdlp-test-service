@@ -67,7 +67,8 @@ case $ACTION in
     
     "up-fresh")
         print_status "Starting services with fresh build (no cache)..."
-        $COMPOSE_CMD up --build --no-cache -d
+        docker build --no-cache -t ytdlp-test-service .
+        $COMPOSE_CMD up -d
         print_success "Services started with fresh build! Access the app at: http://localhost:8090"
         ;;
     
@@ -95,7 +96,8 @@ case $ACTION in
     "restart-fresh")
         print_status "Restarting services with fresh build..."
         $COMPOSE_CMD down
-        $COMPOSE_CMD up --build --no-cache -d
+        docker build --no-cache -t ytdlp-test-service .
+        $COMPOSE_CMD up -d
         print_success "Services restarted with fresh build! Access the app at: http://localhost:8090"
         ;;
     

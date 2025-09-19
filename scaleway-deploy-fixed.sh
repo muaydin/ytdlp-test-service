@@ -109,13 +109,27 @@ build_and_push_image() {
 }
 
 create_k8s_cluster() {
-    print_status "Creating Kubernetes cluster..."
+    print_status "Checking Kubernetes cluster..."
     
-    if scw k8s cluster get $CLUSTER_NAME region=$REGION >/dev/null 2>&1; then
-        print_warning "Cluster $CLUSTER_NAME already exists. Skipping creation."
+    # Check if cluster exists and get its status
+    CLUSTER_STATUS=$(scw k8s cluster list --output=json | jq -r ".[] | select(.name==\"$CLUSTER_NAME\") | .status" 2>/dev/null)
+    
+    if [ "$CLUSTER_STATUS" = "ready" ]; then
+        print_success "Cluster $CLUSTER_NAME already exists and is ready!"
+        return 0
+    elif [ "$CLUSTER_STATUS" = "creating" ] || [ "$CLUSTER_STATUS" = "upgrading" ]; then
+        print_status "Cluster $CLUSTER_NAME is $CLUSTER_STATUS. Waiting for it to be ready..."
+        scw k8s cluster wait $CLUSTER_NAME region=$REGION
+        print_success "Cluster is now ready!"
+        return 0
+    elif [ -n "$CLUSTER_STATUS" ]; then
+        print_warning "Cluster $CLUSTER_NAME exists but status is: $CLUSTER_STATUS"
+        print_status "Waiting for cluster to be ready..."
+        scw k8s cluster wait $CLUSTER_NAME region=$REGION
         return 0
     fi
     
+    print_status "Creating new Kubernetes cluster..."
     scw k8s cluster create \
         name=$CLUSTER_NAME \
         version=1.31.12 \
@@ -130,14 +144,24 @@ create_k8s_cluster() {
 }
 
 create_node_pool() {
-    print_status "Creating node pool..."
+    print_status "Checking node pool..."
     
-    CLUSTER_ID=$(scw k8s cluster get $CLUSTER_NAME region=$REGION --output=json | jq -r '.id')
+    CLUSTER_ID=$(scw k8s cluster list --output=json | jq -r ".[] | select(.name==\"$CLUSTER_NAME\") | .id")
     
-    if scw k8s pool get $CLUSTER_NAME-pool cluster-id=$CLUSTER_ID region=$REGION >/dev/null 2>&1; then
-        print_warning "Node pool already exists. Skipping creation."
+    if [ -z "$CLUSTER_ID" ]; then
+        print_error "Could not find cluster ID for $CLUSTER_NAME"
+        return 1
+    fi
+    
+    # Check if node pool already exists
+    POOL_COUNT=$(scw k8s pool list cluster-id=$CLUSTER_ID region=$REGION --output=json | jq '. | length')
+    
+    if [ "$POOL_COUNT" -gt 0 ]; then
+        print_success "Node pool already exists for cluster $CLUSTER_NAME!"
         return 0
     fi
+    
+    print_status "Creating node pool..."
     
     scw k8s pool create \
         cluster-id=$CLUSTER_ID \
@@ -159,7 +183,14 @@ create_node_pool() {
 configure_kubectl() {
     print_status "Configuring kubectl..."
     
-    scw k8s kubeconfig get $CLUSTER_NAME region=$REGION > kubeconfig.yaml
+    CLUSTER_ID=$(scw k8s cluster list --output=json | jq -r ".[] | select(.name==\"$CLUSTER_NAME\") | .id")
+    
+    if [ -z "$CLUSTER_ID" ]; then
+        print_error "Could not find cluster ID for $CLUSTER_NAME"
+        return 1
+    fi
+    
+    scw k8s kubeconfig get $CLUSTER_ID region=$REGION > kubeconfig.yaml
     
     export KUBECONFIG=$(pwd)/kubeconfig.yaml
     
