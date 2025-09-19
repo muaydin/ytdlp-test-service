@@ -7,6 +7,9 @@ from datetime import datetime
 import json
 import requests
 import shutil
+from functools import lru_cache
+import concurrent.futures
+import time
 
 app = Flask(__name__)
 
@@ -1255,9 +1258,30 @@ def test_download():
             'timestamp': datetime.now().isoformat()
         }), 500
 
+# Cache for video metadata to avoid repeated yt-dlp calls
+@lru_cache(maxsize=100)
+def get_video_metadata_cached(url):
+    """Cached video metadata extraction with optimized yt-dlp options"""
+    ydl_opts = {
+        'quiet': True,
+        'no_warnings': True,
+        'extract_flat': False,
+        'writesubtitles': False,
+        'writeautomaticsub': False,
+        # Optimize for speed - only get essential metadata
+        'skip_download': True,
+        'no_check_certificate': True,
+        'socket_timeout': 10,  # Reduce timeout
+        'retries': 1,  # Reduce retries
+    }
+    
+    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+        return ydl.extract_info(url, download=False)
+
 @app.route('/extract-captions', methods=['POST'])
 def extract_captions():
     """Extract YouTube video captions/subtitles"""
+    start_time = time.time()
     try:
         data = request.get_json()
         url = data.get('url')
@@ -1265,195 +1289,156 @@ def extract_captions():
         if not url:
             return jsonify({'error': 'URL is required', 'success': False}), 400
         
-        # Configure yt-dlp for full JSON metadata extraction
-        ydl_opts = {
-            'quiet': True,
-            'no_warnings': True,
-            'extract_flat': False,
-            'writesubtitles': False,  # Don't download subtitle files
-            'writeautomaticsub': False,  # Don't download auto-generated subtitle files
-        }
+        print(f"Starting caption extraction for: {url}")
         
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            # Extract full video information including subtitle metadata
-            info = ydl.extract_info(url, download=False)
-            
-            if not info:
-                return jsonify({
-                    'success': False,
-                    'error': 'Failed to extract video information',
-                    'timestamp': datetime.now().isoformat()
-                }), 500
-            
-            video_id = info.get('id', 'unknown')
-            default_language = info.get('language') or info.get('language_code')
-            
-            print(f"Default language for video {video_id}: {default_language}")
-            
-            # Get caption data
-            manual_captions = info.get('subtitles', {})
-            auto_captions = info.get('automatic_captions', {})
-            
-            # Filter for VTT captions in manual captions first
-            vtt_tracks = []
-            for lang, tracks in manual_captions.items():
+        # Use cached metadata extraction
+        metadata_start = time.time()
+        info = get_video_metadata_cached(url)
+        metadata_time = time.time() - metadata_start
+        print(f"Metadata extraction took: {metadata_time:.2f}s")
+        
+        if not info:
+            return jsonify({
+                'success': False,
+                'error': 'Failed to extract video information',
+                'timestamp': datetime.now().isoformat()
+            }), 500
+        
+        video_id = info.get('id', 'unknown')
+        default_language = info.get('language') or info.get('language_code')
+        
+        print(f"Default language for video {video_id}: {default_language}")
+        
+        # Get caption data
+        manual_captions = info.get('subtitles', {})
+        auto_captions = info.get('automatic_captions', {})
+        
+        # Optimize caption track processing - limit to top 3 languages for speed
+        vtt_tracks = []
+        processed_count = 0
+        for lang, tracks in manual_captions.items():
+            if processed_count >= 3:  # Reduced from 5 to 3 for speed
+                break
+            for track in tracks:
+                if track.get('ext') == 'vtt':
+                    vtt_tracks.append({
+                        'language': lang,
+                        'type': 'manual',
+                        'url': track['url'],
+                        'ext': track['ext']
+                    })
+                    processed_count += 1
+                    break
+        
+        # Add auto captions if not enough manual ones
+        if len(vtt_tracks) < 3:
+            for lang, tracks in auto_captions.items():
+                if len(vtt_tracks) >= 3:
+                    break
                 for track in tracks:
-                    if track.get('ext') == 'vtt':
-                        vtt_tracks.append({
-                            'language': lang,
-                            'type': 'manual',
-                            'url': track['url'],
-                            'ext': track['ext']
-                        })
-            
-            # If no VTT in manual captions, look in auto captions for TTML
-            if not vtt_tracks:
-                for lang, tracks in auto_captions.items():
-                    for track in tracks:
-                        if track.get('ext') == 'ttml':
-                            vtt_tracks.append({
-                                'language': lang,
-                                'type': 'auto',
-                                'url': track['url'],
-                                'ext': track['ext']
-                            })
-            
-            # If still no captions found, try any format from auto captions
-            if not vtt_tracks:
-                for lang, tracks in auto_captions.items():
-                    for track in tracks:
+                    if track.get('ext') in ['ttml', 'vtt']:
                         vtt_tracks.append({
                             'language': lang,
                             'type': 'auto',
                             'url': track['url'],
-                            'ext': track.get('ext', 'unknown')
+                            'ext': track['ext']
                         })
-                        break  # Take first available format per language
-                    if len(vtt_tracks) >= 5:  # Limit to first 5 languages
                         break
-            
-            if not vtt_tracks:
-                return jsonify({
-                    'success': False,
-                    'error': 'No captions available for this video',
-                    'videoId': video_id,
-                    'videoTitle': info.get('title', 'Unknown'),
-                    'manualCaptionLanguages': list(manual_captions.keys()),
-                    'autoCaptionLanguages': list(auto_captions.keys()),
-                    'timestamp': datetime.now().isoformat()
-                }), 404
-            
-            # Determine best language fallback
-            if not default_language:
-                # Look for English variant
-                english_track = next((track for track in vtt_tracks if track['language'].startswith('en')), None)
-                if english_track:
-                    default_language = english_track['language']
-            
-            # Select the best caption track
-            selected_track = None
-            if default_language:
-                selected_track = next((track for track in vtt_tracks if track['language'] == default_language), None)
-            
-            # Fallback to English if default language not found
-            if not selected_track:
-                selected_track = next((track for track in vtt_tracks if track['language'].startswith('en')), None)
-            
-            # Final fallback to first available
-            if not selected_track:
-                selected_track = vtt_tracks[0]
-            
-            print(f"Selected caption track for {video_id}: {selected_track}")
-            
-            # Try to get caption content (YouTube has protections, so this may not always work)
-            caption_content = ""
-            caption_fetch_error = None
-            
-            # Approach 1: Try direct URL fetch with headers
-            try:
-                headers = {
-                    'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                    'Accept': 'text/vtt,text/plain,*/*',
-                    'Accept-Language': 'en-US,en;q=0.9',
-                    'Referer': 'https://www.youtube.com/'
-                }
-                
-                print(f"Attempting direct fetch of captions from URL...")
-                caption_response = requests.get(selected_track['url'], headers=headers, timeout=15)
-                if caption_response.status_code == 200 and caption_response.text.strip():
-                    caption_content = caption_response.text
-                    print(f"Successfully fetched {len(caption_content)} characters via direct URL")
-                else:
-                    print(f"Direct URL fetch failed: {caption_response.status_code}")
-                    
-            except Exception as e:
-                print(f"Direct URL fetch error: {str(e)}")
-                caption_fetch_error = f"Direct fetch failed: {str(e)}"
-            
-            # Approach 2: If direct fetch failed, try yt-dlp download (usually fails due to YouTube protections)
-            if not caption_content:
-                try:
-                    temp_dir = tempfile.mkdtemp()
-                    caption_file_template = os.path.join(temp_dir, f"{video_id}.%(ext)s")
-                    
-                    caption_opts = {
-                        'outtmpl': caption_file_template,
-                        'writesubtitles': True,
-                        'writeautomaticsub': False,  # Only manual captions
-                        'subtitleslangs': [selected_track['language']],
-                        'subtitlesformat': 'vtt/best',
-                        'skip_download': True,
-                        'quiet': True,
-                        'no_warnings': True
-                    }
-                    
-                    print(f"Attempting yt-dlp caption download...")
-                    with yt_dlp.YoutubeDL(caption_opts) as ydl:
-                        ydl.download([url])
-                    
-                    # Look for downloaded caption files
-                    for filename in os.listdir(temp_dir):
-                        if filename.endswith(('.vtt', '.ttml', '.srv3')):
-                            caption_file_path = os.path.join(temp_dir, filename)
-                            with open(caption_file_path, 'r', encoding='utf-8') as f:
-                                caption_content = f.read()
-                            print(f"Found yt-dlp caption file: {caption_file_path} ({len(caption_content)} chars)")
-                            break
-                    
-                    shutil.rmtree(temp_dir)
-                    
-                except Exception as e:
-                    print(f"yt-dlp caption download error: {str(e)}")
-                    if 'temp_dir' in locals() and os.path.exists(temp_dir):
-                        shutil.rmtree(temp_dir)
-                    caption_fetch_error = f"yt-dlp download failed: {str(e)}"
-                
-            # Return result regardless of whether caption content was fetched
-            result = {
-                'success': True,
+
+        if not vtt_tracks:
+            return jsonify({
+                'success': False,
+                'error': 'No captions available for this video',
                 'videoId': video_id,
                 'videoTitle': info.get('title', 'Unknown'),
-                'videoDuration': info.get('duration', 0),
-                'defaultLanguage': default_language,
-                'selectedTrack': selected_track,
-                'selectedCaptions': caption_content,
-                'availableTracks': vtt_tracks,
-                'manualCaptionCount': len(manual_captions),
-                'autoCaptionCount': len(auto_captions),
+                'manualCaptionLanguages': list(manual_captions.keys()),
+                'autoCaptionLanguages': list(auto_captions.keys()),
                 'timestamp': datetime.now().isoformat()
+            }), 404
+        
+        # Determine best language fallback
+        if not default_language:
+            # Look for English variant
+            english_track = next((track for track in vtt_tracks if track['language'].startswith('en')), None)
+            if english_track:
+                default_language = english_track['language']
+        
+        # Select the best caption track
+        selected_track = None
+        if default_language:
+            selected_track = next((track for track in vtt_tracks if track['language'] == default_language), None)
+        
+        # Fallback to English if default language not found
+        if not selected_track:
+            selected_track = next((track for track in vtt_tracks if track['language'].startswith('en')), None)
+        
+        # Final fallback to first available
+        if not selected_track:
+            selected_track = vtt_tracks[0]
+        
+        print(f"Selected caption track for {video_id}: {selected_track}")
+        
+        # Optimized caption fetching with shorter timeout
+        caption_content = ""
+        caption_fetch_error = None
+        
+        fetch_start = time.time()
+        try:
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                'Accept': 'text/vtt,text/plain,*/*',
+                'Accept-Language': 'en-US,en;q=0.9',
+                'Referer': 'https://www.youtube.com/'
             }
             
-            # Add error info if caption fetching failed
-            if not caption_content and caption_fetch_error:
-                result['captionFetchError'] = caption_fetch_error
-                result['note'] = 'Caption metadata extracted successfully, but content could not be fetched due to YouTube protections'
-            
-            return jsonify(result)
-            
+            print(f"Attempting direct fetch of captions from URL...")
+            caption_response = requests.get(selected_track['url'], headers=headers, timeout=8)  # Reduced from 15s
+            if caption_response.status_code == 200 and caption_response.text.strip():
+                caption_content = caption_response.text
+                fetch_time = time.time() - fetch_start
+                print(f"Successfully fetched {len(caption_content)} characters via direct URL in {fetch_time:.2f}s")
+            else:
+                print(f"Direct URL fetch failed: {caption_response.status_code}")
+                
+        except Exception as e:
+            print(f"Direct URL fetch error: {str(e)}")
+            caption_fetch_error = f"Direct fetch failed: {str(e)}"
+        
+        # Skip yt-dlp fallback for speed - it usually fails anyway due to YouTube protections
+        
+        total_time = time.time() - start_time
+        print(f"Total caption extraction time: {total_time:.2f}s")
+        
+        # Return result
+        result = {
+            'success': True,
+            'videoId': video_id,
+            'videoTitle': info.get('title', 'Unknown'),
+            'videoDuration': info.get('duration', 0),
+            'defaultLanguage': default_language,
+            'selectedTrack': selected_track,
+            'selectedCaptions': caption_content,
+            'availableTracks': vtt_tracks,
+            'manualCaptionCount': len(manual_captions),
+            'autoCaptionCount': len(auto_captions),
+            'processingTime': f"{total_time:.2f}s",
+            'timestamp': datetime.now().isoformat()
+        }
+        
+        # Add error info if caption fetching failed
+        if not caption_content and caption_fetch_error:
+            result['captionFetchError'] = caption_fetch_error
+            result['note'] = 'Caption metadata extracted successfully, but content could not be fetched due to YouTube protections'
+        
+        return jsonify(result)
+        
     except Exception as e:
+        total_time = time.time() - start_time
+        print(f"Caption extraction failed after {total_time:.2f}s: {str(e)}")
         return jsonify({
             'success': False,
             'error': str(e),
+            'processingTime': f"{total_time:.2f}s",
             'timestamp': datetime.now().isoformat()
         }), 500
 
