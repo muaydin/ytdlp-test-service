@@ -11,6 +11,7 @@ from functools import lru_cache
 import concurrent.futures
 import time
 import random
+import re
 
 app = Flask(__name__)
 
@@ -1046,9 +1047,9 @@ def home():
                 setTimeout(function() { document.body.removeChild(notification); }, 3000);
             } catch (error) {
                 alert('Failed to download captions: ' + error.message);
-            }
-        }
-    </script>
+                      }
+      }
+  </script>
 </body>
 </html>
     '''
@@ -1279,9 +1280,9 @@ def get_video_metadata_cached(url):
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         return ydl.extract_info(url, download=False)
 
-@app.route('/extract-captions', methods=['POST'])
-def extract_captions():
-    """Extract YouTube video captions/subtitles"""
+@app.route('/extract-captions-old', methods=['POST'])
+def extract_captions_old():
+    """Extract YouTube video captions/subtitles with enhanced fallback logic"""
     start_time = time.time()
     try:
         data = request.get_json()
@@ -1418,118 +1419,193 @@ def extract_captions():
         
         print(f"Selected caption track for {video_id}: {selected_track}")
         
-        # Optimized caption fetching with shorter timeout
+        # Optimized caption fetching with enhanced fallback logic
         caption_content = ""
         caption_fetch_error = None
+        fallback_attempts = []
+        
+        # Create fallback track list with multiple strategies
+        fallback_tracks = []
+        
+        # Primary track (already selected)
+        fallback_tracks.append(("primary", selected_track))
+        
+        # Fallback 1: If primary is translated, try original language
+        if selected_track and 'tlang=' in selected_track.get('url', ''):
+            # Extract original language from URL
+            import re
+            url_match = re.search(r'lang=([^&]+)', selected_track['url'])
+            if url_match:
+                original_lang = url_match.group(1)
+                # Find track in original language without translation
+                original_track = next((track for track in available_tracks 
+                                     if track['language'] == original_lang and 'tlang=' not in track.get('url', '')), None)
+                if original_track:
+                    fallback_tracks.append(("original_language", original_track))
+        
+        # Fallback 2: Manual captions in preferred language (higher quality)
+        if preferred_manual_track and preferred_manual_track != selected_track:
+            fallback_tracks.append(("preferred_manual", preferred_manual_track))
+        
+        # Fallback 3: English captions (most reliable)
+        if english_manual_track and english_manual_track != selected_track:
+            fallback_tracks.append(("english_manual", english_manual_track))
+        if english_auto_track and english_auto_track != selected_track:
+            fallback_tracks.append(("english_auto", english_auto_track))
+        
+        # Fallback 4: Any manual captions (higher quality than auto)
+        manual_tracks = [track for track in available_tracks 
+                        if track['type'] == 'manual' and track not in [t[1] for t in fallback_tracks]]
+        for track in manual_tracks[:2]:  # Limit to 2 additional manual tracks
+            fallback_tracks.append(("manual_fallback", track))
+        
+        # Fallback 5: Default language without translation
+        if default_track and default_track != selected_track:
+            fallback_tracks.append(("default_language", default_track))
         
         fetch_start = time.time()
-        try:
-            # Enhanced headers to mimic real browser behavior
-            headers = {
-                'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                'Accept': 'text/vtt,application/ttml+xml,text/plain,*/*',
-                'Accept-Language': 'en-US,en;q=0.9,es;q=0.8',
-                'Accept-Encoding': 'gzip, deflate, br',
-                'Cache-Control': 'no-cache',
-                'Connection': 'keep-alive',
-                'DNT': '1',
-                'Pragma': 'no-cache',
-                'Referer': f'https://www.youtube.com/watch?v={video_id}',
-                'Sec-Ch-Ua': '"Not_A Brand";v="8", "Chromium";v="120", "Google Chrome";v="120"',
-                'Sec-Ch-Ua-Mobile': '?0',
-                'Sec-Ch-Ua-Platform': '"macOS"',
-                'Sec-Fetch-Dest': 'empty',
-                'Sec-Fetch-Mode': 'cors',
-                'Sec-Fetch-Site': 'same-origin',
-                'X-Client-Data': 'CIe2yQEIorbJAQipncoBCMDdygEIlaHLAQiHoM0BCLnIzQEY9snNAQ==',
-                'X-Youtube-Client-Name': '1',
-                'X-Youtube-Client-Version': '2.20231214.01.00'
-            }
-            
-            print(f"Attempting direct fetch of captions from URL with enhanced headers...")
-            
-            # Create a session to maintain cookies and connection
-            session = requests.Session()
-            session.headers.update(headers)
-            
-            # Add a small delay to avoid rate limiting
-            import random
-            time.sleep(random.uniform(0.5, 1.5))
-            
-            caption_response = session.get(selected_track['url'], timeout=10)
-            if caption_response.status_code == 200 and caption_response.text.strip():
-                caption_content = caption_response.text
-                fetch_time = time.time() - fetch_start
-                print(f"Successfully fetched {len(caption_content)} characters via direct URL in {fetch_time:.2f}s")
-            else:
-                print(f"Direct URL fetch failed: {caption_response.status_code}")
-                
-        except Exception as e:
-            print(f"Direct URL fetch error: {str(e)}")
-            caption_fetch_error = f"Direct fetch failed: {str(e)}"
         
-        # Fallback to yt-dlp with enhanced configuration if direct fetch failed
+        # Try each fallback track
+        for attempt_name, track in fallback_tracks:
+            if caption_content:  # Stop if we got content
+                break
+                
+            try:
+                print(f"Attempting {attempt_name} caption fetch for track: {track['language']} ({track['type']})")
+                
+                # Enhanced headers to mimic real browser behavior
+                headers = {
+                    'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                    'Accept': 'text/vtt,application/ttml+xml,text/plain,*/*',
+                    'Accept-Language': 'en-US,en;q=0.9,es;q=0.8',
+                    'Accept-Encoding': 'gzip, deflate, br',
+                    'Cache-Control': 'no-cache',
+                    'Connection': 'keep-alive',
+                    'DNT': '1',
+                    'Pragma': 'no-cache',
+                    'Referer': f'https://www.youtube.com/watch?v={video_id}',
+                    'Sec-Ch-Ua': '"Not_A Brand";v="8", "Chromium";v="120", "Google Chrome";v="120"',
+                    'Sec-Ch-Ua-Mobile': '?0',
+                    'Sec-Ch-Ua-Platform': '"macOS"',
+                    'Sec-Fetch-Dest': 'empty',
+                    'Sec-Fetch-Mode': 'cors',
+                    'Sec-Fetch-Site': 'same-origin',
+                    'X-Client-Data': 'CIe2yQEIorbJAQipncoBCMDdygEIlaHLAQiHoM0BCLnIzQEY9snNAQ==',
+                    'X-Youtube-Client-Name': '1',
+                    'X-Youtube-Client-Version': '2.20231214.01.00'
+                }
+                
+                # Create a session to maintain cookies and connection
+                session = requests.Session()
+                session.headers.update(headers)
+                
+                # Progressive delay for rate limiting - longer delays for translation attempts
+                import random
+                if 'tlang=' in track.get('url', ''):
+                    # Longer delay for translated captions
+                    delay = random.uniform(2.0, 4.0)
+                    print(f"Using extended delay ({delay:.1f}s) for translated caption attempt")
+                else:
+                    delay = random.uniform(0.5, 1.5)
+                time.sleep(delay)
+                
+                caption_response = session.get(track['url'], timeout=15)
+                if caption_response.status_code == 200 and caption_response.text.strip():
+                    caption_content = caption_response.text
+                    fetch_time = time.time() - fetch_start
+                    print(f"Successfully fetched {len(caption_content)} characters via {attempt_name} in {fetch_time:.2f}s")
+                    # Update selected_track to reflect what actually worked
+                    selected_track = track
+                    break
+                else:
+                    error_msg = f"{attempt_name} fetch failed: HTTP {caption_response.status_code}"
+                    print(error_msg)
+                    fallback_attempts.append(error_msg)
+                    
+                    # If we get 429 (rate limit), try longer delay before next attempt
+                    if caption_response.status_code == 429:
+                        print("Rate limit detected, adding extra delay before next attempt")
+                        time.sleep(random.uniform(3.0, 6.0))
+                        
+            except Exception as e:
+                error_msg = f"{attempt_name} fetch error: {str(e)}"
+                print(error_msg)
+                fallback_attempts.append(error_msg)
+                if not caption_fetch_error:
+                    caption_fetch_error = error_msg
+        
+        # Enhanced yt-dlp fallback if all direct attempts failed
         if not caption_content:
             print("Attempting yt-dlp fallback with enhanced browser impersonation...")
             try:
                 fallback_start = time.time()
                 
-                # Enhanced yt-dlp options for better YouTube compatibility
-                # Try preferred language first, then selected track language
-                subtitle_langs = [preferred_language, selected_track['language']]
-                # Remove duplicates while preserving order
-                subtitle_langs = list(dict.fromkeys(subtitle_langs))
+                # Try multiple language strategies with yt-dlp
+                language_strategies = [
+                    [preferred_language],  # Preferred language only
+                    ['en'],  # English only
+                    [selected_track['language']],  # Selected track language
+                    ['all']  # All available languages
+                ]
                 
-                ydl_opts = {
-                    'writesubtitles': True,
-                    'writeautomaticsub': True,
-                    'subtitleslangs': subtitle_langs,
-                    'subtitlesformat': 'ttml/vtt/best',
-                    'skip_download': True,
-                    'quiet': True,
-                    'no_warnings': True,
-                    'extract_flat': False,
-                    # Enhanced browser impersonation
-                    'http_headers': {
-                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-                        'Accept-Language': 'en-us,en;q=0.5',
-                        'Sec-Fetch-Mode': 'navigate',
-                    },
-                    # Add cookies and session handling
-                    'cookiefile': None,
-                    'extractor_retries': 3,
-                    'fragment_retries': 3,
-                    'retry_sleep_functions': {'http': lambda n: min(4 ** n, 60)},
-                }
-                
-                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                    # Try to extract subtitle info
-                    info_dict = ydl.extract_info(url, download=False)
+                for strategy_idx, subtitle_langs in enumerate(language_strategies):
+                    if caption_content:  # Stop if we got content
+                        break
+                        
+                    print(f"yt-dlp strategy {strategy_idx + 1}: languages {subtitle_langs}")
                     
-                    # Look for the subtitle content in the extracted info
-                    if 'requested_subtitles' in info_dict and info_dict['requested_subtitles']:
-                        for lang, sub_info in info_dict['requested_subtitles'].items():
-                            if sub_info and 'data' in sub_info:
-                                caption_content = sub_info['data']
-                                fallback_time = time.time() - fallback_start
-                                print(f"Successfully extracted {len(caption_content)} characters via yt-dlp fallback in {fallback_time:.2f}s")
-                                break
-                            elif sub_info and 'url' in sub_info:
-                                # Try to fetch from the URL provided by yt-dlp
-                                try:
-                                    session = requests.Session()
-                                    session.headers.update(headers)
-                                    resp = session.get(sub_info['url'], timeout=10)
-                                    if resp.status_code == 200:
-                                        caption_content = resp.text
+                    ydl_opts = {
+                        'writesubtitles': True,
+                        'writeautomaticsub': True,
+                        'subtitleslangs': subtitle_langs,
+                        'subtitlesformat': 'ttml/vtt/best',
+                        'skip_download': True,
+                        'quiet': True,
+                        'no_warnings': True,
+                        'extract_flat': False,
+                        # Enhanced browser impersonation
+                        'http_headers': {
+                            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+                            'Accept-Language': 'en-us,en;q=0.5',
+                            'Sec-Fetch-Mode': 'navigate',
+                        },
+                        'cookiefile': None,
+                        'extractor_retries': 2,
+                        'fragment_retries': 2,
+                        'retry_sleep_functions': {'http': lambda n: min(3 ** n, 30)},
+                    }
+                    
+                    try:
+                        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                            info_dict = ydl.extract_info(url, download=False)
+                            
+                            if 'requested_subtitles' in info_dict and info_dict['requested_subtitles']:
+                                for lang, sub_info in info_dict['requested_subtitles'].items():
+                                    if sub_info and 'data' in sub_info:
+                                        caption_content = sub_info['data']
                                         fallback_time = time.time() - fallback_start
-                                        print(f"Successfully fetched {len(caption_content)} characters via yt-dlp URL in {fallback_time:.2f}s")
+                                        print(f"Successfully extracted {len(caption_content)} characters via yt-dlp strategy {strategy_idx + 1} in {fallback_time:.2f}s")
                                         break
-                                except Exception as url_e:
-                                    print(f"yt-dlp URL fetch failed: {url_e}")
-                    else:
-                        print("No subtitles available via yt-dlp fallback")
+                                    elif sub_info and 'url' in sub_info:
+                                        try:
+                                            session = requests.Session()
+                                            session.headers.update(headers)
+                                            resp = session.get(sub_info['url'], timeout=15)
+                                            if resp.status_code == 200:
+                                                caption_content = resp.text
+                                                fallback_time = time.time() - fallback_start
+                                                print(f"Successfully fetched {len(caption_content)} characters via yt-dlp URL strategy {strategy_idx + 1} in {fallback_time:.2f}s")
+                                                break
+                                        except Exception as url_e:
+                                            print(f"yt-dlp URL fetch failed: {url_e}")
+                            
+                            if caption_content:
+                                break
+                                
+                    except Exception as strategy_e:
+                        print(f"yt-dlp strategy {strategy_idx + 1} failed: {str(strategy_e)}")
+                        continue
                         
             except Exception as fallback_e:
                 print(f"yt-dlp fallback failed: {str(fallback_e)}")
@@ -1552,6 +1628,7 @@ def extract_captions():
             'manualCaptionCount': len(manual_captions),
             'autoCaptionCount': len(auto_captions),
             'processingTime': f"{total_time:.2f}s",
+            'approach': 'enhanced',
             'timestamp': datetime.now().isoformat()
         }
         
@@ -1559,6 +1636,11 @@ def extract_captions():
         if not caption_content and caption_fetch_error:
             result['captionFetchError'] = caption_fetch_error
             result['note'] = 'Caption metadata extracted successfully, but content could not be fetched due to YouTube protections'
+        
+        # Add fallback attempt information for debugging
+        if fallback_attempts:
+            result['fallbackAttempts'] = fallback_attempts
+            result['totalFallbackAttempts'] = len(fallback_attempts)
         
         return jsonify(result)
         
@@ -1685,7 +1767,36 @@ def api_docs():
                 }
             },
             'POST /extract-captions': {
-                'description': 'Extract and return YouTube video captions/subtitles with language preference',
+                'description': 'Extract YouTube video captions/subtitles with simple, fast approach (VTT preferred)',
+                'request_body': {
+                    'url': 'YouTube URL (required)',
+                    'language': 'Preferred language code (optional, defaults to "en" for English)'
+                },
+                'response_type': 'JSON',
+                'example_request': {
+                    'url': 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+                    'language': 'en'
+                },
+                'example_response': {
+                    'success': True,
+                    'videoId': 'dQw4w9WgXcQ',
+                    'videoTitle': 'Rick Astley - Never Gonna Give You Up',
+                    'defaultLanguage': 'en',
+                    'selectedTrack': {
+                        'language': 'en',
+                        'type': 'manual',
+                        'url': 'https://...',
+                        'ext': 'vtt'
+                    },
+                    'selectedCaptions': 'WEBVTT\\n\\n00:00:00.000 --> 00:00:03.000\\nNever gonna give you up...',
+                    'availableTracks': [],
+                    'manualCaptionCount': 0,
+                    'autoCaptionCount': 12,
+                    'approach': 'simple'
+                }
+            },
+            'POST /extract-captions-old': {
+                'description': 'Extract YouTube video captions/subtitles with enhanced fallback logic and rate limit handling',
                 'request_body': {
                     'url': 'YouTube URL (required)',
                     'language': 'Preferred language code (optional, defaults to "en" for English)'
@@ -1706,10 +1817,12 @@ def api_docs():
                         'url': 'https://...',
                         'ext': 'ttml'
                     },
-                    'selectedCaptions': 'WEBVTT\\n\\n00:00:00.000 --> 00:00:03.000\\nNever gonna give you up...',
+                    'selectedCaptions': 'TTML content...',
                     'availableTracks': [],
                     'manualCaptionCount': 0,
-                    'autoCaptionCount': 12
+                    'autoCaptionCount': 12,
+                    'fallbackAttempts': [],
+                    'approach': 'enhanced'
                 }
             },
             'POST /terminal': {
@@ -1757,6 +1870,183 @@ def api_docs():
     }
     
     return jsonify(docs)
+
+@app.route('/extract-captions', methods=['POST'])
+def extract_captions():
+    """Extract YouTube video captions/subtitles with simple, fast approach"""
+    start_time = time.time()
+    try:
+        data = request.get_json()
+        url = data.get('url')
+        preferred_language = data.get('language', 'en')  # Default to English
+        
+        if not url:
+            return jsonify({'error': 'URL is required', 'success': False}), 400
+        
+        print(f"Starting simple caption extraction for: {url} (preferred language: {preferred_language})")
+        
+        # Single yt-dlp call to get metadata
+        metadata_start = time.time()
+        ydl_opts = {
+            'quiet': True,
+            'no_warnings': True,
+            'extract_flat': False,
+            'writesubtitles': False,
+            'writeautomaticsub': False,
+            'skip_download': True,
+            'no_check_certificate': True,
+            'socket_timeout': 15,
+            'retries': 2,
+        }
+        
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(url, download=False)
+        
+        metadata_time = time.time() - metadata_start
+        print(f"Metadata extraction took: {metadata_time:.2f}s")
+        
+        if not info:
+            return jsonify({
+                'success': False,
+                'error': 'Failed to extract video information',
+                'timestamp': datetime.now().isoformat()
+            }), 500
+        
+        video_id = info.get('id', 'unknown')
+        default_language = info.get('language') or info.get('language_code')
+        
+        print(f"Default language for video {video_id}: {default_language}")
+        
+        # Get caption data
+        manual_captions = info.get('subtitles', {})
+        auto_captions = info.get('automatic_captions', {})
+        
+        # Look for VTT captions in manual captions first
+        vtt_tracks = []
+        for lang, tracks in manual_captions.items():
+            for track in tracks:
+                if track.get('ext') == 'vtt':
+                    vtt_tracks.append({
+                        'language': lang,
+                        'type': 'manual',
+                        'url': track['url'],
+                        'ext': track['ext']
+                    })
+        
+        # If no VTT in manual captions, look for TTML in auto captions
+        if not vtt_tracks:
+            for lang, tracks in auto_captions.items():
+                for track in tracks:
+                    if track.get('ext') == 'ttml':
+                        vtt_tracks.append({
+                            'language': lang,
+                            'type': 'auto',
+                            'url': track['url'],
+                            'ext': track['ext']
+                        })
+        
+        if not vtt_tracks:
+            return jsonify({
+                'success': False,
+                'error': 'No VTT or TTML captions available for this video',
+                'videoId': video_id,
+                'videoTitle': info.get('title', 'Unknown'),
+                'timestamp': datetime.now().isoformat()
+            }), 404
+        
+        # Attempt to prioritize captions in the default language
+        if not default_language:
+            # Look for English variant
+            english_track = next((track for track in vtt_tracks if track['language'].startswith('en')), None)
+            if english_track:
+                default_language = english_track['language']
+        
+        # Select the best caption track
+        selected_track = None
+        
+        # Priority 1: Default language
+        if default_language:
+            selected_track = next((track for track in vtt_tracks if track['language'] == default_language), None)
+        
+        # Priority 2: Preferred language
+        if not selected_track:
+            selected_track = next((track for track in vtt_tracks if track['language'].startswith(preferred_language)), None)
+        
+        # Priority 3: English
+        if not selected_track:
+            selected_track = next((track for track in vtt_tracks if track['language'].startswith('en')), None)
+        
+        # Priority 4: First available
+        if not selected_track:
+            selected_track = vtt_tracks[0]
+        
+        print(f"Selected caption track for {video_id}: {selected_track}")
+        
+        # Fetch the selected caption track
+        fetch_start = time.time()
+        caption_content = ""
+        
+        try:
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                'Accept': 'text/vtt,application/ttml+xml,text/plain,*/*',
+                'Accept-Language': 'en-US,en;q=0.9',
+                'Referer': f'https://www.youtube.com/watch?v={video_id}',
+            }
+            
+            response = requests.get(selected_track['url'], headers=headers, timeout=15)
+            
+            if not response.ok:
+                raise Exception(f"Failed to fetch captions: HTTP {response.status_code}")
+            
+            caption_content = response.text
+            fetch_time = time.time() - fetch_start
+            print(f"Successfully fetched {len(caption_content)} characters in {fetch_time:.2f}s")
+            
+        except Exception as e:
+            print(f"Failed to fetch captions: {str(e)}")
+            return jsonify({
+                'success': False,
+                'error': f'Failed to fetch captions content: {str(e)}',
+                'videoId': video_id,
+                'videoTitle': info.get('title', 'Unknown'),
+                'selectedTrack': selected_track,
+                'availableTracks': vtt_tracks[:10],  # Limit to first 10 for response size
+                'timestamp': datetime.now().isoformat()
+            }), 500
+        
+        total_time = time.time() - start_time
+        print(f"Total simple caption extraction time: {total_time:.2f}s")
+        
+        # Return result
+        result = {
+            'success': True,
+            'videoId': video_id,
+            'videoTitle': info.get('title', 'Unknown'),
+            'videoDuration': info.get('duration', 0),
+            'defaultLanguage': default_language,
+            'selectedTrack': selected_track,
+            'selectedCaptions': caption_content,
+            'availableTracks': vtt_tracks[:10],  # Limit to first 10 for response size
+            'manualCaptionCount': len(manual_captions),
+            'autoCaptionCount': len(auto_captions),
+            'processingTime': f"{total_time:.2f}s",
+            'approach': 'simple',
+            'timestamp': datetime.now().isoformat()
+        }
+        
+        return jsonify(result)
+        
+    except Exception as e:
+        total_time = time.time() - start_time
+        print(f"Simple caption extraction failed after {total_time:.2f}s: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': str(e),
+            'processingTime': f"{total_time:.2f}s",
+            'approach': 'simple',
+            'timestamp': datetime.now().isoformat()
+        }), 500
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 8090))
